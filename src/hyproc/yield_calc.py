@@ -4,21 +4,20 @@ from scipy.interpolate import interp1d
 import json
 from numpy.typing import NDArray
 
-from .config import load_settings
-from .models import Target
+from . import broadening, stopping
+from .models import ReactionConfig, Target
 
-# Load settings
-settings = load_settings()
-
-Z2 = int(settings["reaction"]["Z2"])
+# Standard is simulated this far above its resonance energy (keV)
+STD_ENERGY_OFFSET = 165.0
 
 # Creating the hydrogen profile from the target
-def cH_make(target: Target)-> tuple[list[float], list[float]]:
+def cH_make(target: Target, reaction: ReactionConfig)-> tuple[list[float], list[float]]:
     """
     Creates a hydrogen step profile from the current target.
     
     Parameters:
         target (Target): Target description.
+        reaction (ReactionConfig): Reaction; Z2 is the profiled element.
 
     Returns
     -------
@@ -33,19 +32,20 @@ def cH_make(target: Target)-> tuple[list[float], list[float]]:
         cH_x[i+1] = value
     cH_y = []
     for layer in target["layers"]:
-        z1_fraction = sum(elem["percent_at"] for elem in layer["elements"] if elem["Z"] == Z2) 
+        z1_fraction = sum(elem["percent_at"] for elem in layer["elements"] if elem["Z"] == reaction["Z2"]) 
         cH_y.append(z1_fraction)
     cH_y.insert(0, 0.0) # Inserting 0.0 at index 0
 
     return cH_x, cH_y
 
 # Calculating yield
-def compute_yield(target: Target, x_conv_TFU: NDArray[np.float64], y_conv_TFU: NDArray[np.float64])-> float:
+def compute_yield(target: Target, reaction: ReactionConfig, x_conv_TFU: NDArray[np.float64], y_conv_TFU: NDArray[np.float64])-> float:
     """
     Calculates the gamma-yield at a given energy based on the hydrogen depth profile of the target and broadening function.
 
     Parameters:
         target (Target) : Target description.
+        reaction (ReactionConfig) : Reaction; Z2 is the profiled element.
         x_conv_TFU (list of float) : Thickness values corresponding to the broadening energy profile.
         y_conv_TFU (list of float) : Probability values of the broadening profile mapped to thickness.
 
@@ -53,7 +53,7 @@ def compute_yield(target: Target, x_conv_TFU: NDArray[np.float64], y_conv_TFU: N
         integral (float) : Simulated yield (Count/µC).
     """
     # Hydrogen concentration vector calculation from target
-    cH_x, cH_y = cH_make(target)
+    cH_x, cH_y = cH_make(target, reaction)
     cH_fct = interp1d(cH_x, cH_y, kind='next', bounds_error=False, fill_value=0)
 
     # Broadening vector, but first defining left edges so interp1D can be used with kind next
@@ -100,6 +100,22 @@ def compute_yield(target: Target, x_conv_TFU: NDArray[np.float64], y_conv_TFU: N
         raise ValueError("Computed yield integral is not finite.")
 
     return area
+
+def k_factor(std_target: Target, std_yield: float, reaction: ReactionConfig, beam_width: float, doppler: bool, straggling_model: str, stopping_model: str) -> float:
+    """
+    Computes the K factor (set-up detection efficiency) from the standard, using the standard's reaction.
+    The standard is simulated at reaction["E_R"] + STD_ENERGY_OFFSET.
+    """
+    energy = reaction["E_R"] + STD_ENERGY_OFFSET
+    std_target["layers"][0]["stopping"] = stopping.calc_stopping_cross_section(
+        std_target["layers"][0], energy, reaction, stopping_model
+    )
+    _, x, y, _, _ = broadening.broadening(energy, std_target, beam_width, reaction, doppler, straggling_model, False, None)
+    value = compute_yield(std_target, reaction, x, y)
+    if not np.isfinite(value) or value == 0.0:
+        raise ValueError(f"Standard yield integral is invalid (value={value}). Check target and broadening data.")
+    return std_yield / value
+
 
 def chi_squared_test(x_exp: list[float], y_exp: list[float], x_sim: list[float], y_sim: list[float]) -> float:
     """
@@ -153,7 +169,7 @@ if __name__ == "__main__":
         target_input = json.load(f)
         print('Loaded')
 
-    x,y = cH_make(target_input)
+    x,y = cH_make(target_input, ReactionConfig())
     print(x,y)
     cH_fct = interp1d(x, y, kind='next', bounds_error=False, fill_value=0)
     x0 = np.linspace(0,max(x),500)

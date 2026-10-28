@@ -18,11 +18,12 @@ from . import app_layout
 from . import broadening as mod3
 from . import stopping as mod2
 from . import yield_calc as mod4
-from .config import data_path, settings_path
+from .config import data_path, default_reactions, settings_path
 from .dialogs.energy_range import EnergyRangeDialog
 from .dialogs.import_selection import SheetSelectionDialog, TableSelectionDialog
+from .dialogs.reactions import ReactionsDialog
 from .dialogs.settings import SettingsDialog
-from .models import Layer, Target
+from .models import Layer, Target, reactions_from_sim
 
 def count_datapoints(df_raw: pd.DataFrame, header_row: int) -> int:
     # Count consecutive non-empty rows after the header
@@ -52,7 +53,7 @@ class GUI_App(tk.Tk):
         self.style.configure("Working.TButton", background="orange", foreground="black")
 
         # Load settings for constants
-        self.Z2 = self.load_Z2(self.settings_path)
+        self.std_reaction, self.exp_reaction = default_reactions()
         self.Z2_profile = None
 
         self.runNbr = 0
@@ -82,15 +83,6 @@ class GUI_App(tk.Tk):
         y = self.run_menu_button.winfo_rooty() + self.run_menu_button.winfo_height()
         self.run_menu.post(x, y)    
     
-    def load_Z2(self, settings_path)->int:
-        """
-        Loads Z2 (target atomic number) from settings.
-        """
-        with open(settings_path, 'r', encoding="utf-8") as f:
-            settings = json.load(f)
-        Z2 = int(settings["reaction"]["Z2"])
-        return Z2
-
     def update_chi_plot(self)->None:
         self.ax1.clear()
         visible_values = self.chi_val[self.start_ctr:self.start_ctr + self.visible_count]
@@ -698,13 +690,13 @@ class GUI_App(tk.Tk):
                 messagebox.showerror("Loading standard failed", "SRIM path not found.\n\nPlease check your settings.")
                 return
             self.std_target["layers"][0]["stopping"] = mod2.calc_stopping_cross_section(
-                self.std_target["layers"][0], 6385, stopping_model
+                self.std_target["layers"][0], self.std_reaction["E_R"], self.std_reaction, stopping_model
             )
 
             # Check for the element of interest
-            percent_at = self.std_target["layers"][0].find_element(self.Z2)
+            percent_at = self.std_target["layers"][0].find_element(self.std_reaction["Z2"])
             if percent_at is None or percent_at == 0:
-                messagebox.showerror("Calculation failed", f"Standard calculation error.\n\nNo {periodictable.elements[self.Z2].name.capitalize()} in the standard.")
+                messagebox.showerror("Calculation failed", f"Standard calculation error.\n\nNo {periodictable.elements[self.std_reaction['Z2']].name.capitalize()} in the standard.")
                 return
 
             print('Standard loaded')
@@ -785,6 +777,7 @@ class GUI_App(tk.Tk):
             "saved_at": datetime.now().isoformat(timespec="seconds"),
             "target": self.target,
             "standard": self.std_target,
+            "reactions": {"standard": self.std_reaction, "experiment": self.exp_reaction},
             "experimental_curve": {
                 "energy": getattr(self, "exp_energy", []),
                 "yield": getattr(self, "ec_yield", []),
@@ -853,6 +846,7 @@ class GUI_App(tk.Tk):
             target["layers"] = [Layer(data=layer) for layer in target_layers]
             standard = Target()
             standard["layers"] = [Layer(data=layer) for layer in standard_layers]
+            std_reaction, exp_reaction = reactions_from_sim(data, default_reactions())
 
             experimental_curve = data["experimental_curve"]
             exp_energy = experimental_curve["energy"]
@@ -963,6 +957,8 @@ class GUI_App(tk.Tk):
 
         self.target = target
         self.std_target = standard
+        self.std_reaction = std_reaction
+        self.exp_reaction = exp_reaction
         self.exp_energy = exp_energy
         self.ec_yield = ec_yield
         self.ec_yErr = ec_y_error
@@ -1032,6 +1028,10 @@ class GUI_App(tk.Tk):
     # ----
     def open_settings(self):
         dialog = SettingsDialog(self, self.settings_path)
+        dialog.show()
+
+    def open_reactions(self):
+        dialog = ReactionsDialog(self)
         dialog.show()
 
     def open_manual(self):
@@ -1107,29 +1107,11 @@ class GUI_App(tk.Tk):
         """
         Calculates the K factor (experimental set-up detection efficiency) based on the standard description.
         """      
-        energy = 6550 
-        self.std_target["layers"][0]["stopping"] = mod2.calc_stopping_cross_section(
-            self.std_target["layers"][0], energy, stopping_model
+        K = mod4.k_factor(
+            self.std_target, yield_value, self.std_reaction, beamWidth, DopplerYesNo, straggling_model, stopping_model
         )
-        xc,x,y, layers_contribution, outOfTarget = mod3.broadening(energy, self.std_target, beamWidth, DopplerYesNo, straggling_model, False, None)
-
-        #print(f"DEBUG: Broadening output shapes: x={np.array(x).shape}, y={np.array(y).shape}")
-        #print(f"DEBUG: x range: [{np.min(x):.3f}, {np.max(x):.3f}], y range: [{np.min(y):.6f}, {np.max(y):.6f}]")
-        #print(f"DEBUG: x finite: {np.all(np.isfinite(x))}, y finite: {np.all(np.isfinite(y))}")
-        
-        try:
-            value = mod4.compute_yield(self.std_target, x, y)
-        except ValueError as e:
-            print(f"DEBUG: compute_yield raised ValueError: {e}")
-            raise
-        
-        #print(f"DEBUG: Computed yield value: {value}, finite: {np.isfinite(value)}")
-        if not np.isfinite(value) or value == 0.0:
-            raise ValueError(f"Standard yield integral is invalid (value={value}). Check target and broadening data.")
-        K = yield_value / value
-        #print(self.std_target)
         print("K calculated: ", K)
-        return K        
+        return K
 
     def Calculation(self, force_energy_range: bool = False, use_loaded_curve_energies: bool = False)->None:
         """
@@ -1182,9 +1164,9 @@ class GUI_App(tk.Tk):
         chi_energy_min, chi_energy_max = chi_energy_bounds
 
         # Check for the element of interest in the standard
-        percent_at = self.std_target["layers"][0].find_element(Z=self.Z2)
+        percent_at = self.std_target["layers"][0].find_element(Z=self.std_reaction["Z2"])
         if percent_at is None or percent_at == 0:
-            messagebox.showerror("Calculation failed", f"Standard calculation error.\n\nNo {periodictable.elements[self.Z2].name.capitalize()} in the standard.")
+            messagebox.showerror("Calculation failed", f"Standard calculation error.\n\nNo {periodictable.elements[self.std_reaction['Z2']].name.capitalize()} in the standard.")
             return
 
         # Decide which energy range to use for the calculation
@@ -1244,7 +1226,7 @@ class GUI_App(tk.Tk):
             # Normalising target
             self.target.normalize_all_layers()
             size_before = len(self.target["layers"])
-            self.target = mod2.assign_stopping(self.target, max(energy_range), stopping_model)
+            self.target = mod2.assign_stopping(self.target, max(energy_range), self.exp_reaction, stopping_model)
             self.refresh_layer_list()
             self.refresh_element_list()            
 
@@ -1275,11 +1257,11 @@ class GUI_App(tk.Tk):
                 else:
                     savepath = None
 
-                xc, x, y, layers_contribution, outOfTarget = mod3.broadening(energy, self.target, beamWidth, DopplerYesNo, straggling_model, SaveBroadData, savepath)
+                xc, x, y, layers_contribution, outOfTarget = mod3.broadening(energy, self.target, beamWidth, self.exp_reaction, DopplerYesNo, straggling_model, SaveBroadData, savepath)
                 #print(f"DEBUG: Broadening output shapes: x={np.array(x).shape}, y={np.array(y).shape}")
                 #print(f"DEBUG: x range: [{np.min(x):.3f}, {np.max(x):.3f}], y range: [{np.min(y):.6f}, {np.max(y):.6f}]")
 
-                integral_yield = mod4.compute_yield(self.target, x, y)
+                integral_yield = mod4.compute_yield(self.target, self.exp_reaction, x, y)
                 #print('K*integral_yield: ', K, '*', integral_yield, '=', K * integral_yield)
                 value = K*integral_yield
                 self.sim_energy.append(energy+offset)
@@ -1333,7 +1315,7 @@ class GUI_App(tk.Tk):
         self.Z2_profile = None
     
     def plot_Z2_profile(self)->None:
-        x,y = mod4.cH_make(self.target)
+        x,y = mod4.cH_make(self.target, self.exp_reaction)
 
         # --- If the window already exists, bring it to the front ---
         if self.Z2_profile is not None and self.Z2_profile.winfo_exists():

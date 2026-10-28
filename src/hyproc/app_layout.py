@@ -48,6 +48,7 @@ def create_widgets(self):
         settings_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Settings", menu=settings_menu)
         settings_menu.add_command(label="Settings", command=self.open_settings)
+        settings_menu.add_command(label="Reactions…", command=self.open_reactions)
         settings_menu.add_command(label="Manual", command=self.open_manual)
 
         # Main Frame

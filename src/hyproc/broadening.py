@@ -3,26 +3,8 @@ from scipy.signal import convolve
 import json
 from typing import Sequence
 from numpy.typing import NDArray
-import periodictable
 
-from .config import load_settings
-from .models import Target
-
-# Load settings
-settings = load_settings()
-
-Z1 = int(settings["reaction"]["Z1"])
-A1 = int(settings["reaction"]["A1"])
-M1 = periodictable.elements[Z1][A1].mass* 931.494  # keV/c²
-Z2 = int(settings["reaction"]["Z2"])
-A2 = int(settings["reaction"]["A2"])
-M2 = periodictable.elements[Z2][A2].mass* 931.494  # keV/c²
-
-# Resonance properties
-E_R = settings["resonance"]["E_R"]  # keV
-Gamma = settings["resonance"]["Gamma"]  # keV
-sigma_R = settings["resonance"]["Sigma"]  # mbarn
-
+from .models import ReactionConfig, Target
 
 def gauss(x: NDArray[np.float64], x0:float, sigma:float)->NDArray[np.float64]:
     return (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-(x - x0)**2 / (2 * sigma**2))
@@ -49,7 +31,7 @@ def loss_axis(target: Target)->list[float]:
         E_loss.append(loss + layer["stopping"]*layer["areal_density"])
     return E_loss
 
-def find_layer_index(E_in: float, E_loss: list[float]) -> int:
+def find_layer_index(E_in: float, E_loss: list[float], reaction: ReactionConfig) -> int:
     """
     For a given incident energy, identifies in which layer the resonance is reached in order to extract its properties.
     To do, the energy loss required to reach the resonance is compared to the the energy loss of each layer.
@@ -61,7 +43,7 @@ def find_layer_index(E_in: float, E_loss: list[float]) -> int:
     Returns:
         index (int) : Index of the layer in which the resonance is reached.
     """
-    deltaE_in = E_in - E_R  # Energy loss to get to the resonance
+    deltaE_in = E_in - reaction["E_R"]  # Energy loss to get to the resonance
     if deltaE_in < 0:
         return -2  # Out of target: front of target
     for i, num in enumerate(E_loss):
@@ -105,7 +87,7 @@ def get_Z(target: Target, index: int, excl_H: bool=False, return_list: bool=Fals
 
     return round(Z_mean,2)
 
-def find_in_layer_thickness(E_in: float, E_loss: list[float], index: int, target: Target) -> float:
+def find_in_layer_thickness(E_in: float, E_loss: list[float], index: int, target: Target, reaction: ReactionConfig) -> float:
     """
     Calculates the thickness within the resonance layer at which the resonance occurs.
 
@@ -121,7 +103,7 @@ def find_in_layer_thickness(E_in: float, E_loss: list[float], index: int, target
     Returns:
         float: Thickness within the specified layer at which the resonance is reached.
     """
-    deltaE_in = E_in - E_R 
+    deltaE_in = E_in - reaction["E_R"] 
     if index == 0:
         inlayer_loss = deltaE_in
     # elif deltaE_in > max(E_loss):
@@ -132,7 +114,7 @@ def find_in_layer_thickness(E_in: float, E_loss: list[float], index: int, target
     thickness = inlayer_loss/target["layers"][index]["stopping"]
     return thickness
 
-def find_total_thickness(E_in: float, E_loss: list[float], index: int, target: Target)-> float:
+def find_total_thickness(E_in: float, E_loss: list[float], index: int, target: Target, reaction: ReactionConfig)-> float:
     """
     Calculates the total thickness traveled by the incident particle up to the resonance point in the target.
 
@@ -153,14 +135,14 @@ def find_total_thickness(E_in: float, E_loss: list[float], index: int, target: T
         thickness (float): Total thickness traveled up to the resonance point within the target.
     """
     if index==-2:
-        offset = E_in - E_R
+        offset = E_in - reaction["E_R"]
         return offset/target["layers"][0]["stopping"]
     elif index==-1:
         return sum(layer["areal_density"] for layer in target["layers"])
     thickness = 0.0
     for i in range(index):
         thickness += target["layers"][i]["areal_density"]
-    thickness_in_last_layer = find_in_layer_thickness(E_in, E_loss, index, target)
+    thickness_in_last_layer = find_in_layer_thickness(E_in, E_loss, index, target, reaction)
     thickness+= thickness_in_last_layer
     return thickness
 
@@ -191,7 +173,7 @@ def DopplerSD(target: Target, index: int)-> float:
         delta_D = -0.0218*Z+4.2421  # parameters calculated from a fit between Si & Pb
     return delta_D
 
-def Stragg_law(Z: int, thickness: float, model: str) -> float:
+def Stragg_law(Z: int, thickness: float, reaction: ReactionConfig, model: str) -> float:
     """
     Calculates the standard deviation of the straggling-induced broadening using the specified theoretical model.
 
@@ -208,9 +190,9 @@ def Stragg_law(Z: int, thickness: float, model: str) -> float:
     if model == "Rud corr":
         return 2.03*Z**0.39*np.sqrt(thickness/10.0)/2.355/1.7
     if model == "Bohr":
-        return np.sqrt(0.260532*Z1**2*Z*thickness/1000.0) 
+        return np.sqrt(0.260532*reaction["Z1"]**2*Z*thickness/1000.0) 
 
-def stragg(E_in: float, E_loss: list[float], index: int, target: Target, model: str="Rud corr")-> float:
+def stragg(E_in: float, E_loss: list[float], index: int, target: Target, reaction: ReactionConfig, model: str="Rud corr")-> float:
     """
     Calculates the standard deviation of the straggling-induced gaussian broadening based on the atomic number,
     material thickness, and selected model.
@@ -233,7 +215,7 @@ def stragg(E_in: float, E_loss: list[float], index: int, target: Target, model: 
         for j, layer in enumerate(target["layers"]):
             Z = get_Z(target, j, excl_H=False, return_list=True)
             for Z_el in Z:
-                delta_S = Stragg_law(Z_el[0], layer["areal_density"]*Z_el[1]/100, model)
+                delta_S = Stragg_law(Z_el[0], layer["areal_density"]*Z_el[1]/100, reaction, model)
                 Var_S += delta_S**2
     else:
         for i in range(index+1):
@@ -241,10 +223,10 @@ def stragg(E_in: float, E_loss: list[float], index: int, target: Target, model: 
             if i != index:  
                 DeltaTFU = target["layers"][i]["areal_density"]
             else: 
-                DeltaTFU = find_in_layer_thickness(E_in, E_loss,i, target) 
+                DeltaTFU = find_in_layer_thickness(E_in, E_loss, i, target, reaction) 
 
             for Z_el in Z:
-                delta_S = Stragg_law(Z_el[0], DeltaTFU*Z_el[1]/100, model)
+                delta_S = Stragg_law(Z_el[0], DeltaTFU*Z_el[1]/100, reaction, model)
                 Var_S += delta_S**2
 
     #print('stragg index ', index)
@@ -275,7 +257,7 @@ def save(vector1: Sequence[float], vector2: Sequence[float], filename: str)-> No
             f.write(f"{v1}\t{v2}\n")
 
 
-def broadening(E_in: float, target: Target, delta_B: float, Doppler: bool=True, straggling_model: str="Rud corr", saveData: bool=False, savepath: str | None = None)-> tuple[float, NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], float]:
+def broadening(E_in: float, target: Target, delta_B: float, reaction: ReactionConfig, Doppler: bool=True, straggling_model: str="Rud corr", saveData: bool=False, savepath: str | None = None)-> tuple[float, NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], float]:
     """
     Calculates the full energy broadening profile of an incident particle in a multi-layer target,
     accounting for cross section, beam, Doppler, and straggling broadenings, and converts the energy distribution
@@ -286,6 +268,7 @@ def broadening(E_in: float, target: Target, delta_B: float, Doppler: bool=True, 
         E_in (float) : Incident beam energy (keV).
         target (Target) : Target description.
         delta_B (float) : Beam energy broadening (keV).
+        reaction (ReactionConfig) : Reaction (beam ion and resonance parameters).
         Doppler (bool, optional) : Whether to include Doppler broadening (default True).
         straggling_model (str, optional) : The straggling model.
         saveData (bool, optional) : Whether to save intermediate broadening data to files (default False).
@@ -299,8 +282,11 @@ def broadening(E_in: float, target: Target, delta_B: float, Doppler: bool=True, 
         layers_contribution (NDArray[float64]) : Normalized contributions of each layer to the profile.
         outOfTarget (float) : Fraction of the profile corresponding to particles escaping the target.
     """
+    E_R = reaction["E_R"]
+    Gamma = reaction["Gamma"]
+    sigma_R = reaction["Sigma"]
     E_loss = loss_axis(target)
-    index = find_layer_index(E_in, E_loss)
+    index = find_layer_index(E_in, E_loss, reaction)
     
     # Doppler
     if Doppler: 
@@ -317,7 +303,7 @@ def broadening(E_in: float, target: Target, delta_B: float, Doppler: bool=True, 
     if index==-2:
         delta_S = 0.0
     else:
-        delta_S = stragg(E_in, E_loss, index, target, straggling_model)
+        delta_S = stragg(E_in, E_loss, index, target, reaction, straggling_model)
 
     # Total Gaussian broadening
     SD_gauss = np.sqrt(delta_B**2+delta_D**2+delta_S**2)
@@ -346,8 +332,8 @@ def broadening(E_in: float, target: Target, delta_B: float, Doppler: bool=True, 
     # Convolution
     y_conv = convolve(y1, y2, mode='same') * dx  # x_conv = x, no shift needed
 
-    deltaE_in = E_in - E_R # Energy loss to get to the resonance
-    center = find_total_thickness(E_in, E_loss, index, target)  # Thickness at which the energy resonance is reached for a given incident energy
+    deltaE_in = E_in - reaction["E_R"] # Energy loss to get to the resonance
+    center = find_total_thickness(E_in, E_loss, index, target, reaction)  # Thickness at which the energy resonance is reached for a given incident energy
     # print("c ",center)
 
     x_conv = x
@@ -358,7 +344,7 @@ def broadening(E_in: float, target: Target, delta_B: float, Doppler: bool=True, 
     for j,eVal in enumerate(x_conv):
         deltaE = E_R - eVal  # Energy difference relative to E_R
         Eloss_value = deltaE_in - deltaE  # Energy loss for the current energy value
-        new_index = find_layer_index(E_in - deltaE, E_loss)
+        new_index = find_layer_index(E_in - deltaE, E_loss, reaction)
         outOfTarget = 0
 
         layers_contribution = np.zeros(len(target["layers"]))
@@ -448,7 +434,7 @@ if __name__ == "__main__":
     print(Z)
 
     x=loss_axis(target_input)
-    SD = stragg(E_i, x, -1, target_input)
+    SD = stragg(E_i, x, -1, target_input, ReactionConfig())
  
 
 
