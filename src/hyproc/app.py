@@ -21,6 +21,7 @@ from . import yield_calc as mod4
 from .config import data_path, default_reactions, settings_path
 from .dialogs.energy_range import EnergyRangeDialog
 from .dialogs.import_selection import SheetSelectionDialog, TableSelectionDialog
+from .dialogs.reactions import ReactionsDialog
 from .dialogs.settings import SettingsDialog
 from .models import Layer, Target, reactions_from_sim
 
@@ -1027,6 +1028,10 @@ class GUI_App(tk.Tk):
     # ----
     def open_settings(self):
         dialog = SettingsDialog(self, self.settings_path)
+        dialog.show()
+
+    def open_reactions(self):
+        dialog = ReactionsDialog(self)
         dialog.show()
 
     def open_manual(self):
