@@ -1,0 +1,211 @@
+{
+  "session_id": "2026-10-28__separate-standard-and-experiment-reaction-config",
+  "feature_name": "separate standard and experiment reaction config",
+  "scratch_dir": ".scratch/tests/2026-10-28__separate-standard-and-experiment-reaction-config",
+  "created_at": "2026-10-28T15:19:50.207Z",
+  "template_version": 2,
+  "history": [
+    {
+      "at": "2026-10-28T15:19:50.207Z",
+      "event": "session_started",
+      "phase": "grill",
+      "files": [
+        "01-grill/resume.md"
+      ]
+    },
+    {
+      "at": "2026-10-28T15:30:45.012Z",
+      "event": "grill_written",
+      "phase": "plan-not-started",
+      "files": [
+        "01-grill/resume.md"
+      ]
+    },
+    {
+      "at": "2026-10-28T15:30:45.138Z",
+      "event": "plan_started",
+      "phase": "plan",
+      "files": [
+        "02-plan/plan.md"
+      ]
+    },
+    {
+      "at": "2026-10-28T15:33:57.328Z",
+      "event": "branch_created",
+      "phase": "plan",
+      "detail": {
+        "branch": "feat/separate-reaction-configs",
+        "base": "main"
+      }
+    },
+    {
+      "at": "2026-10-28T15:33:57.365Z",
+      "event": "plan_written",
+      "phase": "ship",
+      "files": [
+        "02-plan/plan.md",
+        "02-plan/tickets/01-reaction-config-and-settings.md",
+        "02-plan/tickets/02-physics-takes-reaction-config.md",
+        "02-plan/tickets/03-app-uses-standard-and-experiment-configs.md",
+        "02-plan/tickets/04-reactions-in-simulation-file.md",
+        "02-plan/tickets/05-reactions-dialog.md"
+      ],
+      "detail": {
+        "tickets": 5
+      }
+    },
+    {
+      "at": "2026-10-28T15:45:00.845Z",
+      "event": "ticket_started",
+      "phase": "ship",
+      "files": [
+        "02-plan/tickets/01-reaction-config-and-settings.md",
+        "03-implement/01-reaction-config-and-settings/commit-log.md"
+      ],
+      "detail": {
+        "ticket": "01-reaction-config-and-settings"
+      }
+    },
+    {
+      "at": "2026-10-28T15:46:56.747Z",
+      "event": "ticket_done",
+      "phase": "ship",
+      "files": [
+        "03-implement/01-reaction-config-and-settings/commit-log.md"
+      ],
+      "detail": {
+        "ticket": "01-reaction-config-and-settings",
+        "commit": "92dce4e"
+      }
+    },
+    {
+      "at": "2026-10-28T15:47:02.917Z",
+      "event": "ticket_started",
+      "phase": "ship",
+      "files": [
+        "02-plan/tickets/02-physics-takes-reaction-config.md",
+        "03-implement/02-physics-takes-reaction-config/commit-log.md"
+      ],
+      "detail": {
+        "ticket": "02-physics-takes-reaction-config"
+      }
+    },
+    {
+      "at": "2026-10-28T15:49:20.680Z",
+      "event": "ticket_done",
+      "phase": "ship",
+      "files": [
+        "03-implement/02-physics-takes-reaction-config/commit-log.md"
+      ],
+      "detail": {
+        "ticket": "02-physics-takes-reaction-config",
+        "commit": "326c94b"
+      }
+    },
+    {
+      "at": "2026-10-28T15:49:20.998Z",
+      "event": "ticket_started",
+      "phase": "ship",
+      "files": [
+        "02-plan/tickets/03-app-uses-standard-and-experiment-configs.md",
+        "03-implement/03-app-uses-standard-and-experiment-configs/commit-log.md"
+      ],
+      "detail": {
+        "ticket": "03-app-uses-standard-and-experiment-configs"
+      }
+    },
+    {
+      "at": "2026-10-28T15:51:57.141Z",
+      "event": "ticket_done",
+      "phase": "ship",
+      "files": [
+        "03-implement/03-app-uses-standard-and-experiment-configs/commit-log.md"
+      ],
+      "detail": {
+        "ticket": "03-app-uses-standard-and-experiment-configs",
+        "commit": "53afd36"
+      }
+    },
+    {
+      "at": "2026-10-28T15:51:57.433Z",
+      "event": "ticket_started",
+      "phase": "ship",
+      "files": [
+        "02-plan/tickets/04-reactions-in-simulation-file.md",
+        "03-implement/04-reactions-in-simulation-file/commit-log.md"
+      ],
+      "detail": {
+        "ticket": "04-reactions-in-simulation-file"
+      }
+    },
+    {
+      "at": "2026-10-28T15:53:02.451Z",
+      "event": "ticket_done",
+      "phase": "ship",
+      "files": [
+        "03-implement/04-reactions-in-simulation-file/commit-log.md"
+      ],
+      "detail": {
+        "ticket": "04-reactions-in-simulation-file",
+        "commit": "caafacd"
+      }
+    },
+    {
+      "at": "2026-10-28T15:53:02.720Z",
+      "event": "ticket_started",
+      "phase": "ship",
+      "files": [
+        "02-plan/tickets/05-reactions-dialog.md",
+        "03-implement/05-reactions-dialog/commit-log.md"
+      ],
+      "detail": {
+        "ticket": "05-reactions-dialog"
+      }
+    },
+    {
+      "at": "2026-10-28T15:54:38.592Z",
+      "event": "ticket_done",
+      "phase": "finish-pending",
+      "files": [
+        "03-implement/05-reactions-dialog/commit-log.md"
+      ],
+      "detail": {
+        "ticket": "05-reactions-dialog",
+        "commit": "9d5232f"
+      }
+    },
+    {
+      "at": "2026-10-28T15:57:44.720Z",
+      "event": "changelog_written",
+      "phase": "finish-pending",
+      "detail": {
+        "bump": "minor"
+      }
+    },
+    {
+      "at": "2026-10-28T15:57:54.309Z",
+      "event": "session_finished",
+      "phase": "finished",
+      "files": [
+        "INDEX.md"
+      ]
+    }
+  ],
+  "current_phase": "finished",
+  "git": {
+    "branch": "feat/separate-reaction-configs",
+    "base_branch": "main",
+    "branch_created_at": "2026-10-28T15:33:57.328Z",
+    "pr_url": null
+  },
+  "ship_mode": "subagent+inline",
+  "changelog": {
+    "bump": "minor",
+    "floor": "minor",
+    "reason": null,
+    "bullets": 5,
+    "path": ".work/changelog/2026-10-28__separate-standard-and-experiment-reaction-config.md",
+    "written_at": "2026-10-28T15:57:44.707Z"
+  },
+  "finished_at": "2026-10-28T15:57:54.309Z"
+}
