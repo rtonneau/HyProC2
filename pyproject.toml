@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hyproc"
-version = "0.1.0"
+version = "0.2.0"
 description = "Depth profiling by resonant nuclear reaction analysis: simulation of excitation curves for layered targets."
 readme = "README.md"
 license = "GPL-3.0-or-later"

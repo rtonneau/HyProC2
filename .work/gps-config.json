@@ -7,5 +7,10 @@
   "jev": {
     "enabled": true,
     "detected_at": "2026-10-28T16:03:52.834Z"
+  },
+  "release": {
+    "versionFiles": [
+      "pyproject.toml"
+    ]
   }
 }
