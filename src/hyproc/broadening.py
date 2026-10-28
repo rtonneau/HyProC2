@@ -5,23 +5,23 @@ from typing import Sequence
 from numpy.typing import NDArray
 import periodictable
 
-from .config import load_settings
+from .config import default_reactions
 from .models import Target
 
-# Load settings
-settings = load_settings()
+# Load settings (the experiment reaction config)
+reaction = default_reactions()[1]
 
-Z1 = int(settings["reaction"]["Z1"])
-A1 = int(settings["reaction"]["A1"])
+Z1 = reaction["Z1"]
+A1 = reaction["A1"]
 M1 = periodictable.elements[Z1][A1].mass* 931.494  # keV/c²
-Z2 = int(settings["reaction"]["Z2"])
-A2 = int(settings["reaction"]["A2"])
+Z2 = reaction["Z2"]
+A2 = reaction["A2"]
 M2 = periodictable.elements[Z2][A2].mass* 931.494  # keV/c²
 
 # Resonance properties
-E_R = settings["resonance"]["E_R"]  # keV
-Gamma = settings["resonance"]["Gamma"]  # keV
-sigma_R = settings["resonance"]["Sigma"]  # mbarn
+E_R = reaction["E_R"]  # keV
+Gamma = reaction["Gamma"]  # keV
+sigma_R = reaction["Sigma"]  # mbarn
 
 
 def gauss(x: NDArray[np.float64], x0:float, sigma:float)->NDArray[np.float64]:

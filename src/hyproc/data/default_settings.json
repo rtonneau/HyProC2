@@ -8,15 +8,24 @@
             "yield_err": "Incertitude"
         }
     },
-    "reaction": {
-        "Z1": "1",
-        "A1": "1",
-        "Z2": "7",
-        "A2": "15"
-    },
-    "resonance": {
-        "E_R": 6385.0,
-        "Gamma": 1.8,
-        "Sigma": 1.65
+    "reactions": {
+        "standard": {
+            "Z1": 1,
+            "A1": 1,
+            "Z2": 7,
+            "A2": 15,
+            "E_R": 6385.0,
+            "Gamma": 1.8,
+            "Sigma": 1.65
+        },
+        "experiment": {
+            "Z1": 1,
+            "A1": 1,
+            "Z2": 7,
+            "A2": 15,
+            "E_R": 6385.0,
+            "Gamma": 1.8,
+            "Sigma": 1.65
+        }
     }
 }

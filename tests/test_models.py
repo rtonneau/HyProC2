@@ -1,6 +1,8 @@
+import json
+
 import pytest
 
-from hyproc.models import Element, Layer, Target
+from hyproc.models import Element, Layer, ReactionConfig, Target
 
 
 def test_layer_normalize():
@@ -32,3 +34,17 @@ def test_target_layer_operations():
     target.remove_layer(0)
     target.remove_layer(0)  # the last layer is never removed
     assert len(target["layers"]) == 1
+
+
+def test_reaction_config_defaults():
+    reaction = ReactionConfig()
+
+    assert reaction == {"Z1": 1, "A1": 1, "Z2": 7, "A2": 15, "E_R": 6385.0, "Gamma": 1.8, "Sigma": 1.65}
+
+
+def test_reaction_config_casts_strings():
+    reaction = ReactionConfig({"Z2": "7", "A2": "15", "E_R": "6385"})
+
+    assert reaction["Z2"] == 7 and isinstance(reaction["Z2"], int)
+    assert reaction["E_R"] == 6385.0 and isinstance(reaction["E_R"], float)
+    assert json.loads(json.dumps(reaction)) == reaction

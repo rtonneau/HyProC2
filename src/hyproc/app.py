@@ -22,7 +22,7 @@ from .config import data_path, settings_path
 from .dialogs.energy_range import EnergyRangeDialog
 from .dialogs.import_selection import SheetSelectionDialog, TableSelectionDialog
 from .dialogs.settings import SettingsDialog
-from .models import Layer, Target
+from .models import Layer, ReactionConfig, Target
 
 def count_datapoints(df_raw: pd.DataFrame, header_row: int) -> int:
     # Count consecutive non-empty rows after the header
@@ -88,7 +88,8 @@ class GUI_App(tk.Tk):
         """
         with open(settings_path, 'r', encoding="utf-8") as f:
             settings = json.load(f)
-        Z2 = int(settings["reaction"]["Z2"])
+        reactions = settings.get("reactions", {})
+        Z2 = ReactionConfig(reactions.get("experiment"))["Z2"]
         return Z2
 
     def update_chi_plot(self)->None:

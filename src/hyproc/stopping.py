@@ -7,16 +7,16 @@ import math
 from functools import lru_cache
 from typing import Literal
 
-from .config import data_path, load_settings
+from .config import data_path, default_reactions, load_settings
 from .models import Layer, Target
 
-# Load settings
-settings = load_settings()
+# Load settings (the experiment reaction config)
+reaction = default_reactions()[1]
 
-Z1 = int(settings["reaction"]["Z1"])
-A1 = int(settings["reaction"]["A1"])
+Z1 = reaction["Z1"]
+A1 = reaction["A1"]
 M1 = periodictable.elements[Z1][A1].mass  # amu
-energy_res = settings["resonance"]["E_R"]  # keV
+energy_res = reaction["E_R"]  # keV
 
 # Stopping cross section variation allowed within a layer (in %)
 percentage = 0.5

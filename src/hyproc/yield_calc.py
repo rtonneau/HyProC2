@@ -4,13 +4,11 @@ from scipy.interpolate import interp1d
 import json
 from numpy.typing import NDArray
 
-from .config import load_settings
+from .config import default_reactions
 from .models import Target
 
-# Load settings
-settings = load_settings()
-
-Z2 = int(settings["reaction"]["Z2"])
+# Load settings (the experiment reaction config)
+Z2 = default_reactions()[1]["Z2"]
 
 # Creating the hydrogen profile from the target
 def cH_make(target: Target)-> tuple[list[float], list[float]]:

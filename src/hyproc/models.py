@@ -1,5 +1,27 @@
 import copy
 
+
+class ReactionConfig(dict):
+    """Nuclear reaction and resonance parameters, serialised as plain JSON.
+
+    Z1/A1 are the beam ion, Z2/A2 the profiled element; E_R (keV), Gamma (keV)
+    and Sigma (mbarn) describe the resonance.
+    """
+    INT_KEYS = ("Z1", "A1", "Z2", "A2")
+    FLOAT_KEYS = ("E_R", "Gamma", "Sigma")
+    DEFAULTS = {"Z1": 1, "A1": 1, "Z2": 7, "A2": 15, "E_R": 6385.0, "Gamma": 1.8, "Sigma": 1.65}
+
+    def __init__(self, data=None) -> None:
+        super().__init__()
+        values = dict(self.DEFAULTS)
+        if data is not None:
+            values.update({key: data[key] for key in self.DEFAULTS if key in data})
+        for key in self.INT_KEYS:
+            self[key] = int(float(values[key]))
+        for key in self.FLOAT_KEYS:
+            self[key] = float(values[key])
+
+
 class Element(dict):
     def __init__(self, data=None, Z: int = 14, percent_at: float = 100.0)->None: # Default: Si, 100% at.
         super().__init__()

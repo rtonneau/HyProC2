@@ -9,6 +9,8 @@ import sys
 from importlib import resources
 from pathlib import Path
 
+from .models import ReactionConfig
+
 APP_NAME = "HyProC"
 
 
@@ -40,12 +42,42 @@ def settings_path() -> str:
             settings = json.load(f)
         if not settings.get("save_path"):
             settings["save_path"] = str(Path.home())
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(settings, f, indent=4)
+        _write_settings(str(path), settings)
     return str(path)
 
 
+def _write_settings(path: str, settings: dict) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(settings, f, indent=4)
+
+
+def _migrate_reactions(settings: dict) -> bool:
+    """Replaces the old ``reaction``/``resonance`` blocks by ``reactions``; returns True if changed."""
+    if "reactions" in settings or not ("reaction" in settings or "resonance" in settings):
+        return False
+    old = {**settings.pop("reaction", {}), **settings.pop("resonance", {})}
+    settings["reactions"] = {"standard": dict(old), "experiment": dict(old)}
+    return True
+
+
 def load_settings() -> dict:
-    """Loads the user's settings."""
-    with open(settings_path(), "r", encoding="utf-8") as f:
-        return json.load(f)
+    """Loads the user's settings, migrating an old-shape file (rewritten once)."""
+    path = settings_path()
+    with open(path, "r", encoding="utf-8") as f:
+        settings = json.load(f)
+    if _migrate_reactions(settings):
+        _write_settings(path, settings)
+    return settings
+
+
+def default_reactions() -> tuple[ReactionConfig, ReactionConfig]:
+    """Returns the default (standard, experiment) reaction configs."""
+    reactions = load_settings().get("reactions", {})
+    return ReactionConfig(reactions.get("standard")), ReactionConfig(reactions.get("experiment"))
+
+
+def save_default_reactions(standard: ReactionConfig, experiment: ReactionConfig) -> None:
+    """Writes the default (standard, experiment) reaction configs to the user's settings."""
+    settings = load_settings()
+    settings["reactions"] = {"standard": dict(standard), "experiment": dict(experiment)}
+    _write_settings(settings_path(), settings)
