@@ -4,19 +4,16 @@ from scipy.interpolate import interp1d
 import json
 from numpy.typing import NDArray
 
-from .config import default_reactions
-from .models import Target
-
-# Load settings (the experiment reaction config)
-Z2 = default_reactions()[1]["Z2"]
+from .models import ReactionConfig, Target
 
 # Creating the hydrogen profile from the target
-def cH_make(target: Target)-> tuple[list[float], list[float]]:
+def cH_make(target: Target, reaction: ReactionConfig)-> tuple[list[float], list[float]]:
     """
     Creates a hydrogen step profile from the current target.
     
     Parameters:
         target (Target): Target description.
+        reaction (ReactionConfig): Reaction; Z2 is the profiled element.
 
     Returns
     -------
@@ -31,19 +28,20 @@ def cH_make(target: Target)-> tuple[list[float], list[float]]:
         cH_x[i+1] = value
     cH_y = []
     for layer in target["layers"]:
-        z1_fraction = sum(elem["percent_at"] for elem in layer["elements"] if elem["Z"] == Z2) 
+        z1_fraction = sum(elem["percent_at"] for elem in layer["elements"] if elem["Z"] == reaction["Z2"]) 
         cH_y.append(z1_fraction)
     cH_y.insert(0, 0.0) # Inserting 0.0 at index 0
 
     return cH_x, cH_y
 
 # Calculating yield
-def compute_yield(target: Target, x_conv_TFU: NDArray[np.float64], y_conv_TFU: NDArray[np.float64])-> float:
+def compute_yield(target: Target, reaction: ReactionConfig, x_conv_TFU: NDArray[np.float64], y_conv_TFU: NDArray[np.float64])-> float:
     """
     Calculates the gamma-yield at a given energy based on the hydrogen depth profile of the target and broadening function.
 
     Parameters:
         target (Target) : Target description.
+        reaction (ReactionConfig) : Reaction; Z2 is the profiled element.
         x_conv_TFU (list of float) : Thickness values corresponding to the broadening energy profile.
         y_conv_TFU (list of float) : Probability values of the broadening profile mapped to thickness.
 
@@ -51,7 +49,7 @@ def compute_yield(target: Target, x_conv_TFU: NDArray[np.float64], y_conv_TFU: N
         integral (float) : Simulated yield (Count/µC).
     """
     # Hydrogen concentration vector calculation from target
-    cH_x, cH_y = cH_make(target)
+    cH_x, cH_y = cH_make(target, reaction)
     cH_fct = interp1d(cH_x, cH_y, kind='next', bounds_error=False, fill_value=0)
 
     # Broadening vector, but first defining left edges so interp1D can be used with kind next
@@ -151,7 +149,7 @@ if __name__ == "__main__":
         target_input = json.load(f)
         print('Loaded')
 
-    x,y = cH_make(target_input)
+    x,y = cH_make(target_input, ReactionConfig())
     print(x,y)
     cH_fct = interp1d(x, y, kind='next', bounds_error=False, fill_value=0)
     x0 = np.linspace(0,max(x),500)

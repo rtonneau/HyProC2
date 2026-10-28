@@ -23,8 +23,8 @@ surrounding file.
 
 ## Code gotchas
 
-- `stopping`, `broadening`, `yield_calc` read settings **at import time** into module constants;
-  changes to reaction/resonance need an app restart.
+- `stopping`, `broadening`, `yield_calc` hold no reaction constants: every public function takes a `ReactionConfig`
+  (`reaction`); `app.py` passes `self.reaction` (from `config.default_reactions()[1]`).
 - Settings live in the per-user config dir (`config.settings_path()`), seeded from
   `src/hyproc/data/default_settings.json`. Tests isolate them via `HYPROC_CONFIG_DIR`
   (set in `tests/conftest.py` before any `hyproc` import).

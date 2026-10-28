@@ -18,7 +18,7 @@ from . import app_layout
 from . import broadening as mod3
 from . import stopping as mod2
 from . import yield_calc as mod4
-from .config import data_path, settings_path
+from .config import data_path, default_reactions, settings_path
 from .dialogs.energy_range import EnergyRangeDialog
 from .dialogs.import_selection import SheetSelectionDialog, TableSelectionDialog
 from .dialogs.settings import SettingsDialog
@@ -52,6 +52,7 @@ class GUI_App(tk.Tk):
         self.style.configure("Working.TButton", background="orange", foreground="black")
 
         # Load settings for constants
+        self.reaction = default_reactions()[1]
         self.Z2 = self.load_Z2(self.settings_path)
         self.Z2_profile = None
 
@@ -699,7 +700,7 @@ class GUI_App(tk.Tk):
                 messagebox.showerror("Loading standard failed", "SRIM path not found.\n\nPlease check your settings.")
                 return
             self.std_target["layers"][0]["stopping"] = mod2.calc_stopping_cross_section(
-                self.std_target["layers"][0], 6385, stopping_model
+                self.std_target["layers"][0], 6385, self.reaction, stopping_model
             )
 
             # Check for the element of interest
@@ -1110,16 +1111,16 @@ class GUI_App(tk.Tk):
         """      
         energy = 6550 
         self.std_target["layers"][0]["stopping"] = mod2.calc_stopping_cross_section(
-            self.std_target["layers"][0], energy, stopping_model
+            self.std_target["layers"][0], energy, self.reaction, stopping_model
         )
-        xc,x,y, layers_contribution, outOfTarget = mod3.broadening(energy, self.std_target, beamWidth, DopplerYesNo, straggling_model, False, None)
+        xc,x,y, layers_contribution, outOfTarget = mod3.broadening(energy, self.std_target, beamWidth, self.reaction, DopplerYesNo, straggling_model, False, None)
 
         #print(f"DEBUG: Broadening output shapes: x={np.array(x).shape}, y={np.array(y).shape}")
         #print(f"DEBUG: x range: [{np.min(x):.3f}, {np.max(x):.3f}], y range: [{np.min(y):.6f}, {np.max(y):.6f}]")
         #print(f"DEBUG: x finite: {np.all(np.isfinite(x))}, y finite: {np.all(np.isfinite(y))}")
         
         try:
-            value = mod4.compute_yield(self.std_target, x, y)
+            value = mod4.compute_yield(self.std_target, self.reaction, x, y)
         except ValueError as e:
             print(f"DEBUG: compute_yield raised ValueError: {e}")
             raise
@@ -1245,7 +1246,7 @@ class GUI_App(tk.Tk):
             # Normalising target
             self.target.normalize_all_layers()
             size_before = len(self.target["layers"])
-            self.target = mod2.assign_stopping(self.target, max(energy_range), stopping_model)
+            self.target = mod2.assign_stopping(self.target, max(energy_range), self.reaction, stopping_model)
             self.refresh_layer_list()
             self.refresh_element_list()            
 
@@ -1276,11 +1277,11 @@ class GUI_App(tk.Tk):
                 else:
                     savepath = None
 
-                xc, x, y, layers_contribution, outOfTarget = mod3.broadening(energy, self.target, beamWidth, DopplerYesNo, straggling_model, SaveBroadData, savepath)
+                xc, x, y, layers_contribution, outOfTarget = mod3.broadening(energy, self.target, beamWidth, self.reaction, DopplerYesNo, straggling_model, SaveBroadData, savepath)
                 #print(f"DEBUG: Broadening output shapes: x={np.array(x).shape}, y={np.array(y).shape}")
                 #print(f"DEBUG: x range: [{np.min(x):.3f}, {np.max(x):.3f}], y range: [{np.min(y):.6f}, {np.max(y):.6f}]")
 
-                integral_yield = mod4.compute_yield(self.target, x, y)
+                integral_yield = mod4.compute_yield(self.target, self.reaction, x, y)
                 #print('K*integral_yield: ', K, '*', integral_yield, '=', K * integral_yield)
                 value = K*integral_yield
                 self.sim_energy.append(energy+offset)
@@ -1334,7 +1335,7 @@ class GUI_App(tk.Tk):
         self.Z2_profile = None
     
     def plot_Z2_profile(self)->None:
-        x,y = mod4.cH_make(self.target)
+        x,y = mod4.cH_make(self.target, self.reaction)
 
         # --- If the window already exists, bring it to the front ---
         if self.Z2_profile is not None and self.Z2_profile.winfo_exists():

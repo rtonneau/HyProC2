@@ -7,16 +7,14 @@ import math
 from functools import lru_cache
 from typing import Literal
 
-from .config import data_path, default_reactions, load_settings
-from .models import Layer, Target
+from .config import data_path, load_settings
+from .models import Layer, ReactionConfig, Target
 
-# Load settings (the experiment reaction config)
-reaction = default_reactions()[1]
 
-Z1 = reaction["Z1"]
-A1 = reaction["A1"]
-M1 = periodictable.elements[Z1][A1].mass  # amu
-energy_res = reaction["E_R"]  # keV
+def _beam_mass(reaction: ReactionConfig) -> float:
+    """Beam ion mass in amu."""
+    return periodictable.elements[reaction["Z1"]][reaction["A1"]].mass
+
 
 # Stopping cross section variation allowed within a layer (in %)
 percentage = 0.5
@@ -27,13 +25,14 @@ def check_srim_path(settings_path: str) -> bool:
     return os.path.exists(os.path.join(path, "SR Module"))
 
 # Writing input file for SRIM
-def write_input(layer: Layer, energy: float)->None:
+def write_input(layer: Layer, energy: float, reaction: ReactionConfig)->None:
     """
     Writes the SR.IN input file that SRIM uses to calculate the stopping cross section of a given layer.
 
     Parameters:
         layer (Layer) : layer of a given target.
         energy (float) : Energy (in keV) at which the stopping cross section is going to be calculated.
+        reaction (ReactionConfig) : Reaction whose beam ion (Z1/A1) is stopped.
 
     Returns
     -------
@@ -76,7 +75,7 @@ def write_input(layer: Layer, energy: float)->None:
         file.write("---Output File Name\n")
         file.write('"Output"\n')
         file.write("---Ion(Z), Ion Mass(u)\n")
-        file.write(f"{Z1}   {M1}\n")
+        file.write(f"{reaction['Z1']}   {_beam_mass(reaction)}\n")
         file.write("---Target Data: (Solid=0,Gas=1), Density(g/cm3), Compound Corr.\n")
         file.write(f"0   {total_density:.4f}    0\n")
         file.write("---Number of Target Elements \n")
@@ -137,8 +136,9 @@ def _load_dk_parameters() -> list[list[dict | None]]:
     return data["parameters"]
 
 
-def _scs_stopping_cross_section(z2: int, energy_per_u: float) -> float:
+def _scs_stopping_cross_section(z2: int, energy_per_u: float, reaction: ReactionConfig) -> float:
     """Return the SCS-25-Solid electronic stopping cross section in 10^-15 eV cm^2 (eV/TFU)."""
+    Z1 = reaction["Z1"]
     try:
         entry = _load_dk_parameters()[Z1][z2]
     except (IndexError, TypeError) as exc:
@@ -163,8 +163,10 @@ def _scs_stopping_cross_section(z2: int, energy_per_u: float) -> float:
     return stopping_cross_section
 
 
-def _ziegler_nuclear_stopping_cross_section(z2: int, energy: float) -> float:
+def _ziegler_nuclear_stopping_cross_section(z2: int, energy: float, reaction: ReactionConfig) -> float:
     """Return the universal nuclear stopping cross section in eV/TFU."""
+    Z1 = reaction["Z1"]
+    M1 = _beam_mass(reaction)
     target_mass = periodictable.elements[z2].mass
     if not math.isfinite(M1) or M1 <= 0 or not math.isfinite(target_mass) or target_mass <= 0:
         raise ValueError(f"Invalid projectile or target mass for Z1={Z1}, Z2={z2}.")
@@ -189,12 +191,13 @@ def _ziegler_nuclear_stopping_cross_section(z2: int, energy: float) -> float:
     )
 
 
-def _calc_scs_stopping_components(layer: Layer, energy: float) -> tuple[float, float]:
+def _calc_scs_stopping_components(layer: Layer, energy: float, reaction: ReactionConfig) -> tuple[float, float]:
     """Return Bragg-weighted electronic and nuclear SCS stopping in keV/TFU."""
     if not math.isfinite(energy) or energy < 0:
         raise ValueError("SCS-25-Solid stopping cross section requires a finite, non-negative energy in keV.")
     if energy == 0:
         return 0.0, 0.0
+    M1 = _beam_mass(reaction)
     if not math.isfinite(M1) or M1 <= 0:
         raise ValueError("The incident-particle mass M1 must be positive for the SCS-25-Solid model.")
 
@@ -216,50 +219,52 @@ def _calc_scs_stopping_components(layer: Layer, energy: float) -> tuple[float, f
             raise ValueError(f"Invalid target atomic number for the SCS-25-Solid model: {z2_value}.")
         atomic_fraction = atomic_percent / total_percent
         electronic_stopping_cross_section += (
-            atomic_fraction * _scs_stopping_cross_section(z2, energy_per_u)
+            atomic_fraction * _scs_stopping_cross_section(z2, energy_per_u, reaction)
         )
         nuclear_stopping_cross_section += (
-            atomic_fraction * _ziegler_nuclear_stopping_cross_section(z2, energy)
+            atomic_fraction * _ziegler_nuclear_stopping_cross_section(z2, energy, reaction)
         )
 
     # Both Bragg-weighted components are in eV/TFU.
     return electronic_stopping_cross_section / 1000.0, nuclear_stopping_cross_section / 1000.0
 
 
-def _calc_scs_stopping_cross_section(layer: Layer, energy: float) -> float:
-    electronic_stopping, nuclear_stopping = _calc_scs_stopping_components(layer, energy)
+def _calc_scs_stopping_cross_section(layer: Layer, energy: float, reaction: ReactionConfig) -> float:
+    electronic_stopping, nuclear_stopping = _calc_scs_stopping_components(layer, energy, reaction)
     return electronic_stopping + nuclear_stopping
 
 
-def calc_stopping_cross_section(layer: Layer, energy: float, model: Literal["SRIM", "SCS-25-Solid"] = "SRIM") -> float:
+def calc_stopping_cross_section(layer: Layer, energy: float, reaction: ReactionConfig, model: Literal["SRIM", "SCS-25-Solid"] = "SRIM") -> float:
     """
     Computes the stopping cross section of a given layer at a certain energy.
 
     Parameters:
         layer (Layer) : layer of a given target.
         energy (float) : Energy (in keV) at which the stopping cross section is going to be calculated.
+        reaction (ReactionConfig) : Reaction whose beam ion is stopped.
         model (str) : "SRIM" or "SCS-25-Solid" (electronic plus Ziegler nuclear).
 
     Returns:
         S (float) : Stopping cross section in keV/TFU
     """
     if model == "SCS-25-Solid":
-        return _calc_scs_stopping_cross_section(layer, energy)
+        return _calc_scs_stopping_cross_section(layer, energy, reaction)
     if model != "SRIM":
         raise ValueError(f"Unsupported stopping-cross-section model: {model}")
 
-    write_input(layer, energy)
+    write_input(layer, energy, reaction)
     subprocess.run(["SRModule.exe"], check=True)
 
     return read_SRIM_stopping_cross_section()/1000 # Final units: keV/TFU
 
-def assign_stopping(target: Target, energy: float, model: Literal["SRIM", "SCS-25-Solid"] = "SRIM") -> Target:
+def assign_stopping(target: Target, energy: float, reaction: ReactionConfig, model: Literal["SRIM", "SCS-25-Solid"] = "SRIM") -> Target:
     '''
     Computes the stopping cross section of each layer based on its composition and the initial beam energy. The stopping cross section is considered constant, therefore layers that are too thick are cut in smaller ones to keep that approximation correct.
 
     Parameters:
         target (Target): Target  description
         energy (float): Max energy of the excitation curve
+        reaction (ReactionConfig): Reaction whose beam ion is stopped
 
     Returns:
         target_copy (Target): Target description. Each layer has a constant stopping cross section (in keV/TFU)
@@ -291,7 +296,7 @@ def assign_stopping(target: Target, energy: float, model: Literal["SRIM", "SCS-2
             if E_in <= 0:
                 partDidntEnterLayer = True
                 break
-            S_in = calc_stopping_cross_section(layer, E_in, model)
+            S_in = calc_stopping_cross_section(layer, E_in, reaction, model)
             print(f"IN - Energy: {E_in:.3f} keV & Stopping: {S_in:.6f} keV/TFU")
             E_out = E_in - layer["areal_density"] * S_in
 
@@ -299,7 +304,7 @@ def assign_stopping(target: Target, energy: float, model: Literal["SRIM", "SCS-2
                 E_out = 0
                 S_out = 0.000001
             else:
-                S_out = calc_stopping_cross_section(layer, E_out, model)
+                S_out = calc_stopping_cross_section(layer, E_out, reaction, model)
             print(f'OUT - Energy: {E_out:.3f} keV & Stopping: {S_out:.6f} keV/TFU')
 
             # Checking for variation between the stopping cross sections on entry VS on exit
@@ -337,13 +342,13 @@ def assign_stopping(target: Target, energy: float, model: Literal["SRIM", "SCS-2
                 new_target["layers"][k+nbr]["stopping"] = 0
                 continue
 
-            S_in = calc_stopping_cross_section(new_target["layers"][nbr+k], E_in, model)
+            S_in = calc_stopping_cross_section(new_target["layers"][nbr+k], E_in, reaction, model)
             E_out = E_in - new_target["layers"][k+nbr]["areal_density"] * S_in
             if E_out < 0:
                 E_out = 0
                 S_out = 0.000001
             else:
-                S_out = calc_stopping_cross_section(new_target["layers"][k+nbr], E_out, model)
+                S_out = calc_stopping_cross_section(new_target["layers"][k+nbr], E_out, reaction, model)
 
             new_target["layers"][k+nbr]["stopping"] = (S_in + S_out)/2
 
@@ -351,7 +356,8 @@ def assign_stopping(target: Target, energy: float, model: Literal["SRIM", "SCS-2
 
 if __name__ == "__main__":
     # Test case for the stopping cross section calculation
-    print("Incoming ion: Z1 =", Z1, "A1 =", A1, "M1 =", M1, "amu")
+    reaction = ReactionConfig()
+    print("Incoming ion: Z1 =", reaction["Z1"], "A1 =", reaction["A1"], "M1 =", _beam_mass(reaction), "amu")
     example_layer = {
         "elements": [
             {"Z": 14, "percent_at": 33.333},
@@ -363,10 +369,10 @@ if __name__ == "__main__":
     model = "SCS-25-Solid"  # SRIM or SCS-25-Solid
 
     if model == "SCS-25-Solid":
-        electronic_stopping, nuclear_stopping = _calc_scs_stopping_components(example_layer, energy)
+        electronic_stopping, nuclear_stopping = _calc_scs_stopping_components(example_layer, energy, reaction)
         print(f"Electronic stopping cross section: {electronic_stopping:.7g} keV/TFU")
         print(f"Nuclear stopping cross section: {nuclear_stopping:.7g} keV/TFU")
         stopping_cross_section = electronic_stopping + nuclear_stopping
     else:
-        stopping_cross_section = calc_stopping_cross_section(example_layer, energy, model)
+        stopping_cross_section = calc_stopping_cross_section(example_layer, energy, reaction, model)
     print(f"Total stopping cross section: {stopping_cross_section:.7g} keV/TFU")
