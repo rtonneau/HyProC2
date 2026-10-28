@@ -22,7 +22,7 @@ from .config import data_path, default_reactions, settings_path
 from .dialogs.energy_range import EnergyRangeDialog
 from .dialogs.import_selection import SheetSelectionDialog, TableSelectionDialog
 from .dialogs.settings import SettingsDialog
-from .models import Layer, Target
+from .models import Layer, Target, reactions_from_sim
 
 def count_datapoints(df_raw: pd.DataFrame, header_row: int) -> int:
     # Count consecutive non-empty rows after the header
@@ -776,6 +776,7 @@ class GUI_App(tk.Tk):
             "saved_at": datetime.now().isoformat(timespec="seconds"),
             "target": self.target,
             "standard": self.std_target,
+            "reactions": {"standard": self.std_reaction, "experiment": self.exp_reaction},
             "experimental_curve": {
                 "energy": getattr(self, "exp_energy", []),
                 "yield": getattr(self, "ec_yield", []),
@@ -844,6 +845,7 @@ class GUI_App(tk.Tk):
             target["layers"] = [Layer(data=layer) for layer in target_layers]
             standard = Target()
             standard["layers"] = [Layer(data=layer) for layer in standard_layers]
+            std_reaction, exp_reaction = reactions_from_sim(data, default_reactions())
 
             experimental_curve = data["experimental_curve"]
             exp_energy = experimental_curve["energy"]
@@ -954,6 +956,8 @@ class GUI_App(tk.Tk):
 
         self.target = target
         self.std_target = standard
+        self.std_reaction = std_reaction
+        self.exp_reaction = exp_reaction
         self.exp_energy = exp_energy
         self.ec_yield = ec_yield
         self.ec_yErr = ec_y_error

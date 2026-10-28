@@ -22,6 +22,33 @@ class ReactionConfig(dict):
             self[key] = float(values[key])
 
 
+def reactions_from_sim(
+    data: dict, defaults: tuple[ReactionConfig, ReactionConfig]
+) -> tuple[ReactionConfig, ReactionConfig]:
+    """Parse the standard and experiment reactions of a simulation file.
+
+    A missing ``reactions`` block, or missing keys inside a side, are filled from
+    ``defaults`` (standard, experiment). Malformed values raise ValueError.
+    """
+    saved = data.get("reactions")
+    if saved is None:
+        return ReactionConfig(defaults[0]), ReactionConfig(defaults[1])
+    if not isinstance(saved, dict):
+        raise ValueError("Saved reactions must be a JSON object.")
+    parsed = []
+    for side, side_defaults in zip(("standard", "experiment"), defaults):
+        side_data = saved.get(side)
+        if side_data is None:
+            side_data = {}
+        if not isinstance(side_data, dict):
+            raise ValueError(f"Saved {side} reaction must be a JSON object.")
+        try:
+            parsed.append(ReactionConfig({**side_defaults, **side_data}))
+        except (TypeError, ValueError, OverflowError) as e:
+            raise ValueError(f"Invalid {side} reaction value: {e}") from e
+    return parsed[0], parsed[1]
+
+
 class Element(dict):
     def __init__(self, data=None, Z: int = 14, percent_at: float = 100.0)->None: # Default: Si, 100% at.
         super().__init__()
