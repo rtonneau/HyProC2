@@ -4,7 +4,11 @@ from scipy.interpolate import interp1d
 import json
 from numpy.typing import NDArray
 
+from . import broadening, stopping
 from .models import ReactionConfig, Target
+
+# Standard is simulated this far above its resonance energy (keV)
+STD_ENERGY_OFFSET = 165.0
 
 # Creating the hydrogen profile from the target
 def cH_make(target: Target, reaction: ReactionConfig)-> tuple[list[float], list[float]]:
@@ -96,6 +100,22 @@ def compute_yield(target: Target, reaction: ReactionConfig, x_conv_TFU: NDArray[
         raise ValueError("Computed yield integral is not finite.")
 
     return area
+
+def k_factor(std_target: Target, std_yield: float, reaction: ReactionConfig, beam_width: float, doppler: bool, straggling_model: str, stopping_model: str) -> float:
+    """
+    Computes the K factor (set-up detection efficiency) from the standard, using the standard's reaction.
+    The standard is simulated at reaction["E_R"] + STD_ENERGY_OFFSET.
+    """
+    energy = reaction["E_R"] + STD_ENERGY_OFFSET
+    std_target["layers"][0]["stopping"] = stopping.calc_stopping_cross_section(
+        std_target["layers"][0], energy, reaction, stopping_model
+    )
+    _, x, y, _, _ = broadening.broadening(energy, std_target, beam_width, reaction, doppler, straggling_model, False, None)
+    value = compute_yield(std_target, reaction, x, y)
+    if not np.isfinite(value) or value == 0.0:
+        raise ValueError(f"Standard yield integral is invalid (value={value}). Check target and broadening data.")
+    return std_yield / value
+
 
 def chi_squared_test(x_exp: list[float], y_exp: list[float], x_sim: list[float], y_sim: list[float]) -> float:
     """

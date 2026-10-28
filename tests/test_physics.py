@@ -98,3 +98,27 @@ def test_profile_follows_reaction_z2():
 
     assert y_h == [0.0, 15.0]
     assert y_n == [0.0, 5.0]
+
+
+def thick_target() -> Target:
+    target = make_target()
+    target["layers"][0]["areal_density"] = 200000.0
+    return target
+
+
+def test_k_factor_uses_standard_reaction():
+    std_reaction = ReactionConfig({"E_R": 6385.0})
+    exp_reaction = ReactionConfig({"E_R": 6000.0})
+    assert std_reaction["Z2"] == exp_reaction["Z2"]
+    k_std = yield_calc.k_factor(thick_target(), 100.0, std_reaction, 1.0, True, "Rud corr", "SCS-25-Solid")
+    k_exp = yield_calc.k_factor(thick_target(), 100.0, exp_reaction, 1.0, True, "Rud corr", "SCS-25-Solid")
+
+    # Reference computed by hand from the standard's config
+    energy = std_reaction["E_R"] + yield_calc.STD_ENERGY_OFFSET
+    ref = thick_target()
+    ref["layers"][0]["stopping"] = stopping.calc_stopping_cross_section(
+        ref["layers"][0], energy, std_reaction, "SCS-25-Solid"
+    )
+    _, x, y, _, _ = broadening.broadening(energy, ref, 1.0, std_reaction, True, "Rud corr")
+    assert k_std == pytest.approx(100.0 / yield_calc.compute_yield(ref, std_reaction, x, y))
+    assert k_std != pytest.approx(k_exp)

@@ -95,12 +95,6 @@ class SettingsDialog(tk.Toplevel):
             with open(self.settings_path, 'w', encoding='utf-8') as f:
                 json.dump(self.config, f, indent=4)
 
-            # Update parent's Z2 if possible
-            try:
-                self.parent.Z2 = self.parent.load_Z2(self.settings_path)
-            except Exception:
-                pass
-
             self.destroy()
         except Exception as e:
             messagebox.showerror("Save failed", f"Could not save settings:\n{e}")
