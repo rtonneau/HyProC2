@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from hyproc import config
 from hyproc.models import ReactionConfig
 
@@ -77,3 +79,11 @@ def test_default_reactions_roundtrip(tmp_path, monkeypatch):
         "standard": dict(standard),
         "experiment": dict(experiment),
     }
+
+
+def test_failed_settings_save_keeps_existing_file(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text('{"extension": true}', encoding="utf-8")
+    with pytest.raises(TypeError):
+        config.save_settings({"invalid": object()}, str(path))
+    assert config.load_settings(str(path)) == {"extension": True}

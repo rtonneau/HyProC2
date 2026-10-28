@@ -1,14 +1,21 @@
-import os
-import subprocess
-import periodictable
-import json
+"""Stopping models and the existing adaptive layer-segmentation algorithm."""
+
 import copy
+import json
+import logging
 import math
+import subprocess
 from functools import lru_cache
+from pathlib import Path
+from threading import Lock
 from typing import Literal
+
+import periodictable
 
 from .config import data_path, load_settings
 from .models import Layer, ReactionConfig, Target
+
+logger = logging.getLogger(__name__)
 
 
 def _beam_mass(reaction: ReactionConfig) -> float:
@@ -19,13 +26,23 @@ def _beam_mass(reaction: ReactionConfig) -> float:
 # Stopping cross section variation allowed within a layer (in %)
 percentage = 0.5
 
+# SRIM uses fixed SR.IN/Output filenames. One process-local lock protects the
+# entire exchange; independent HyProC processes still need separate SRIM copies.
+_srim_lock = Lock()
+
+
+def _srim_directory() -> Path:
+    return Path(load_settings()["SRIM_path"]).expanduser().resolve() / "SR Module"
+
+
 def check_srim_path(settings_path: str) -> bool:
-    with open(settings_path, 'r', encoding="utf-8") as f:
+    with open(settings_path, "r", encoding="utf-8") as f:
         path = json.load(f)["SRIM_path"]
-    return os.path.exists(os.path.join(path, "SR Module"))
+    return (Path(path).expanduser() / "SR Module" / "SRModule.exe").is_file()
+
 
 # Writing input file for SRIM
-def write_input(layer: Layer, energy: float, reaction: ReactionConfig)->None:
+def write_input(layer: Layer, energy: float, reaction: ReactionConfig, module_directory: Path | None = None) -> None:
     """
     Writes the SR.IN input file that SRIM uses to calculate the stopping cross section of a given layer.
 
@@ -39,15 +56,10 @@ def write_input(layer: Layer, energy: float, reaction: ReactionConfig)->None:
         None
     """
     # Loading the SRIM path from the settings json file
-    path = load_settings()["SRIM_path"]
-    SRIM_path = os.path.join(path,"SR Module")    
-    os.chdir(SRIM_path)
-
-    file_path = os.path.join(SRIM_path, "SR.IN")
+    directory = module_directory or _srim_directory()
+    file_path = directory / "SR.IN"
 
     # Delete existing file if it exists
-    #if os.path.isfile(file_path):
-    #    os.remove(file_path)
 
     # Precompute element data
     element_data = []
@@ -60,17 +72,12 @@ def write_input(layer: Layer, energy: float, reaction: ReactionConfig)->None:
         mass = el.mass
         density = el.density
 
-        element_data.append({
-            "Z": Z,
-            "name": name,
-            "percent_at": percent_at,
-            "mass": mass
-        })
+        element_data.append({"Z": Z, "name": name, "percent_at": percent_at, "mass": mass})
 
-        total_density += density * percent_at/100
+        total_density += density * percent_at / 100
 
     # Write the input file
-    with open(file_path, 'w') as file:
+    with open(file_path, "w") as file:
         file.write("---Stopping/Range Input Data (Number-format: Period = Decimal Point) \n")
         file.write("---Output File Name\n")
         file.write('"Output"\n')
@@ -89,8 +96,9 @@ def write_input(layer: Layer, energy: float, reaction: ReactionConfig)->None:
         file.write("0   0 \n")
         file.write(f"{energy}")
 
+
 # Reading output file from SRIM
-def read_SRIM_stopping_cross_section()-> float:
+def read_SRIM_stopping_cross_section(output_path: Path | None = None) -> float:
     """
     Reads the output file from SRIM.
 
@@ -100,11 +108,12 @@ def read_SRIM_stopping_cross_section()-> float:
 
     Returns
     -------
-        S (float): Stopping cross section in keV/TFU (both electronic and nuclear)
+        S (float): Stopping cross section in eV/TFU (both electronic and nuclear).
+        The caller converts to the application's keV/TFU.
     """
-    with open("Output", 'r') as f: # Output is the file name!!
+    with open(output_path or _srim_directory() / "Output", "r") as f:
         lines = f.readlines()
-        
+
     # Find the line containing "Stopping Units"
     for idx, line in enumerate(lines):
         if "Stopping Units =  eV/(1E15 atoms/cm2)" in line:
@@ -114,9 +123,11 @@ def read_SRIM_stopping_cross_section()-> float:
         raise ValueError('"Stopping Units" not found in file.')
 
     # Extract the line and parse values
+    if target_line_index >= len(lines):
+        raise ValueError("SRIM output ends before the stopping data row.")
     target_line = lines[target_line_index].strip()
     parts = target_line.split()
-    
+
     if len(parts) < 3:
         raise ValueError("The data line doesn't have enough columns.")
 
@@ -127,6 +138,7 @@ def read_SRIM_stopping_cross_section()-> float:
         raise ValueError("Non-numeric values found in expected columns.")
 
     return s_elec + s_nuc
+
 
 @lru_cache(maxsize=1)
 def _load_dk_parameters() -> list[list[dict | None]]:
@@ -149,12 +161,8 @@ def _scs_stopping_cross_section(z2: int, energy_per_u: float, reaction: Reaction
     f1, s, p, a0, a1, a2, a3, f2, q, r, b0, b1, b2, b3 = entry["params"]
     x = energy_per_u
     try:
-        term_a = f1 * x**s * math.log(math.e + p * x) / (
-            a0 + a1 * x**0.25 + a2 * x**0.5 + a3 * x ** (1 + s)
-        )
-        term_b = f2 * x**q * math.log(math.e + r * x) / (
-            b0 + b1 * x**0.25 + b2 * x**0.5 + b3 * x ** (1 + q)
-        )
+        term_a = f1 * x**s * math.log(math.e + p * x) / (a0 + a1 * x**0.25 + a2 * x**0.5 + a3 * x ** (1 + s))
+        term_b = f2 * x**q * math.log(math.e + r * x) / (b0 + b1 * x**0.25 + b2 * x**0.5 + b3 * x ** (1 + q))
         stopping_cross_section = term_a + term_b
     except (OverflowError, ValueError, ZeroDivisionError) as exc:
         raise ValueError(f"Could not evaluate the SCS-25-Solid stopping model for Z1={Z1}, Z2={z2}.") from exc
@@ -171,24 +179,11 @@ def _ziegler_nuclear_stopping_cross_section(z2: int, energy: float, reaction: Re
     if not math.isfinite(M1) or M1 <= 0 or not math.isfinite(target_mass) or target_mass <= 0:
         raise ValueError(f"Invalid projectile or target mass for Z1={Z1}, Z2={z2}.")
 
-    reduced_energy = (
-        32.53 * target_mass * energy
-        / (
-            Z1 * z2 * (M1 + target_mass)
-            * (Z1**0.23 + z2**0.23)
-        )
-    )
+    reduced_energy = 32.53 * target_mass * energy / (Z1 * z2 * (M1 + target_mass) * (Z1**0.23 + z2**0.23))
     reduced_stopping = math.log1p(1.1383 * reduced_energy) / (
-        2 * (
-            reduced_energy
-            + 0.01321 * reduced_energy**0.21226
-            + 0.19593 * math.sqrt(reduced_energy)
-        )
+        2 * (reduced_energy + 0.01321 * reduced_energy**0.21226 + 0.19593 * math.sqrt(reduced_energy))
     )
-    return (
-        8.462 * Z1 * z2 * M1 * reduced_stopping
-        / ((M1 + target_mass) * (Z1**0.23 + z2**0.23))
-    )
+    return 8.462 * Z1 * z2 * M1 * reduced_stopping / ((M1 + target_mass) * (Z1**0.23 + z2**0.23))
 
 
 def _calc_scs_stopping_components(layer: Layer, energy: float, reaction: ReactionConfig) -> tuple[float, float]:
@@ -218,11 +213,9 @@ def _calc_scs_stopping_components(layer: Layer, energy: float, reaction: Reactio
         if z2 < 1 or z2 != z2_value:
             raise ValueError(f"Invalid target atomic number for the SCS-25-Solid model: {z2_value}.")
         atomic_fraction = atomic_percent / total_percent
-        electronic_stopping_cross_section += (
-            atomic_fraction * _scs_stopping_cross_section(z2, energy_per_u, reaction)
-        )
-        nuclear_stopping_cross_section += (
-            atomic_fraction * _ziegler_nuclear_stopping_cross_section(z2, energy, reaction)
+        electronic_stopping_cross_section += atomic_fraction * _scs_stopping_cross_section(z2, energy_per_u, reaction)
+        nuclear_stopping_cross_section += atomic_fraction * _ziegler_nuclear_stopping_cross_section(
+            z2, energy, reaction
         )
 
     # Both Bragg-weighted components are in eV/TFU.
@@ -234,7 +227,9 @@ def _calc_scs_stopping_cross_section(layer: Layer, energy: float, reaction: Reac
     return electronic_stopping + nuclear_stopping
 
 
-def calc_stopping_cross_section(layer: Layer, energy: float, reaction: ReactionConfig, model: Literal["SRIM", "SCS-25-Solid"] = "SRIM") -> float:
+def calc_stopping_cross_section(
+    layer: Layer, energy: float, reaction: ReactionConfig, model: Literal["SRIM", "SCS-25-Solid"] = "SRIM"
+) -> float:
     """
     Computes the stopping cross section of a given layer at a certain energy.
 
@@ -252,13 +247,21 @@ def calc_stopping_cross_section(layer: Layer, energy: float, reaction: ReactionC
     if model != "SRIM":
         raise ValueError(f"Unsupported stopping-cross-section model: {model}")
 
-    write_input(layer, energy, reaction)
-    subprocess.run(["SRModule.exe"], check=True)
+    directory = _srim_directory()
+    executable = directory / "SRModule.exe"
+    if not executable.is_file():
+        raise ValueError("SRModule.exe not found. Check the SRIM path in settings.")
+    with _srim_lock:
+        write_input(layer, energy, reaction, directory)
+        # cwd belongs to the child, never to the GUI/CLI process.
+        subprocess.run([str(executable)], cwd=directory, check=True)
+        return read_SRIM_stopping_cross_section(directory / "Output") / 1000
 
-    return read_SRIM_stopping_cross_section()/1000 # Final units: keV/TFU
 
-def assign_stopping(target: Target, energy: float, reaction: ReactionConfig, model: Literal["SRIM", "SCS-25-Solid"] = "SRIM") -> Target:
-    '''
+def assign_stopping(
+    target: Target, energy: float, reaction: ReactionConfig, model: Literal["SRIM", "SCS-25-Solid"] = "SRIM"
+) -> Target:
+    """
     Computes the stopping cross section of each layer based on its composition and the initial beam energy. The stopping cross section is considered constant, therefore layers that are too thick are cut in smaller ones to keep that approximation correct.
 
     Parameters:
@@ -269,7 +272,7 @@ def assign_stopping(target: Target, energy: float, reaction: ReactionConfig, mod
     Returns:
         target_copy (Target): Target description. Each layer has a constant stopping cross section (in keV/TFU)
 
-    '''
+    """
     new_target = copy.deepcopy(target)
     new_target["layers"].clear()
     partDidntEnterLayer = False
@@ -283,21 +286,23 @@ def assign_stopping(target: Target, energy: float, reaction: ReactionConfig, mod
         S_in = 10
         S_out = 1
 
-        while abs(S_in - S_out)/max(abs(S_in), abs(S_out)) > percentage/100.0: 
+        while abs(S_in - S_out) / max(abs(S_in), abs(S_out)) > percentage / 100.0:
             if i == 0:
-                E_in = energy 
-                print(f'--- Layer #0, E in: {E_in:.6f} keV')
+                E_in = energy
+                logger.debug(f"--- Layer #0, E in: {E_in:.6f} keV")
             else:
                 k = len(new_target["layers"])
-                loss = sum(new_target["layers"][n]["areal_density"] * new_target["layers"][n]["stopping"] for n in range(k))
+                loss = sum(
+                    new_target["layers"][n]["areal_density"] * new_target["layers"][n]["stopping"] for n in range(k)
+                )
                 E_in = energy - loss
-                print(f'--- Layer #{i}, E in: {E_in:.6f} keV')
+                logger.debug(f"--- Layer #{i}, E in: {E_in:.6f} keV")
 
             if E_in <= 0:
                 partDidntEnterLayer = True
                 break
             S_in = calc_stopping_cross_section(layer, E_in, reaction, model)
-            print(f"IN - Energy: {E_in:.3f} keV & Stopping: {S_in:.6f} keV/TFU")
+            logger.debug(f"IN - Energy: {E_in:.3f} keV & Stopping: {S_in:.6f} keV/TFU")
             E_out = E_in - layer["areal_density"] * S_in
 
             if E_out < 0:
@@ -305,24 +310,25 @@ def assign_stopping(target: Target, energy: float, reaction: ReactionConfig, mod
                 S_out = 0.000001
             else:
                 S_out = calc_stopping_cross_section(layer, E_out, reaction, model)
-            print(f'OUT - Energy: {E_out:.3f} keV & Stopping: {S_out:.6f} keV/TFU')
+            logger.debug(f"OUT - Energy: {E_out:.3f} keV & Stopping: {S_out:.6f} keV/TFU")
 
             # Checking for variation between the stopping cross sections on entry VS on exit
-            if abs(S_in - S_out)/max(abs(S_in), abs(S_out)) > percentage/100.0:
-                print("Layer too thick, cutting")
+            if abs(S_in - S_out) / max(abs(S_in), abs(S_out)) > percentage / 100.0:
+                logger.debug("Layer too thick, cutting")
                 layer["areal_density"] /= 2
-                ctr+=1
+                ctr += 1
             else:
-                layer["stopping"] = (S_in + S_out) / 2 # No segmentation required, assigning stopping cross section (mid layer approx)
-                print(f'Final Stopping: {layer["stopping"]:.9f} keV/TFU')
+                layer["stopping"] = (
+                    S_in + S_out
+                ) / 2  # No segmentation required, assigning stopping cross section (mid layer approx)
+                logger.debug(f"Final Stopping: {layer['stopping']:.9f} keV/TFU")
 
-        #NbrDaughter = 2**ctr
-        if ctr ==2:
+        if ctr == 2:
             Count = 2
         else:
-            Count = max(1,(ctr-1)**2)
+            Count = max(1, (ctr - 1) ** 2)
 
-        daughterLayers_by_layer.append(Count) # Count: Number of daughter layers from parent layer
+        daughterLayers_by_layer.append(Count)  # Count: Number of daughter layers from parent layer
         index += ctr
 
         # Segmentation sequence
@@ -336,43 +342,24 @@ def assign_stopping(target: Target, energy: float, reaction: ReactionConfig, mod
                 if partDidntEnterLayer:
                     new_target["layers"][index]["stopping"] = 0
 
-            loss = sum(new_target["layers"][n]["areal_density"] * new_target["layers"][n]["stopping"] for n in range(nbr+k))
+            loss = sum(
+                new_target["layers"][n]["areal_density"] * new_target["layers"][n]["stopping"] for n in range(nbr + k)
+            )
             E_in = energy - loss
-            if E_in <= 0 or partDidntEnterLayer: # If the particle doesn't reach the start of layer, putting stopping cross section to 0
-                new_target["layers"][k+nbr]["stopping"] = 0
+            if (
+                E_in <= 0 or partDidntEnterLayer
+            ):  # If the particle doesn't reach the start of layer, putting stopping cross section to 0
+                new_target["layers"][k + nbr]["stopping"] = 0
                 continue
 
-            S_in = calc_stopping_cross_section(new_target["layers"][nbr+k], E_in, reaction, model)
-            E_out = E_in - new_target["layers"][k+nbr]["areal_density"] * S_in
+            S_in = calc_stopping_cross_section(new_target["layers"][nbr + k], E_in, reaction, model)
+            E_out = E_in - new_target["layers"][k + nbr]["areal_density"] * S_in
             if E_out < 0:
                 E_out = 0
                 S_out = 0.000001
             else:
-                S_out = calc_stopping_cross_section(new_target["layers"][k+nbr], E_out, reaction, model)
+                S_out = calc_stopping_cross_section(new_target["layers"][k + nbr], E_out, reaction, model)
 
-            new_target["layers"][k+nbr]["stopping"] = (S_in + S_out)/2
+            new_target["layers"][k + nbr]["stopping"] = (S_in + S_out) / 2
 
     return new_target
-
-if __name__ == "__main__":
-    # Test case for the stopping cross section calculation
-    reaction = ReactionConfig()
-    print("Incoming ion: Z1 =", reaction["Z1"], "A1 =", reaction["A1"], "M1 =", _beam_mass(reaction), "amu")
-    example_layer = {
-        "elements": [
-            {"Z": 14, "percent_at": 33.333},
-            {"Z": 8, "percent_at": 66.667}
-        ],
-        "areal_density": 1500.0
-    }
-    energy = 5000  # keV
-    model = "SCS-25-Solid"  # SRIM or SCS-25-Solid
-
-    if model == "SCS-25-Solid":
-        electronic_stopping, nuclear_stopping = _calc_scs_stopping_components(example_layer, energy, reaction)
-        print(f"Electronic stopping cross section: {electronic_stopping:.7g} keV/TFU")
-        print(f"Nuclear stopping cross section: {nuclear_stopping:.7g} keV/TFU")
-        stopping_cross_section = electronic_stopping + nuclear_stopping
-    else:
-        stopping_cross_section = calc_stopping_cross_section(example_layer, energy, reaction, model)
-    print(f"Total stopping cross section: {stopping_cross_section:.7g} keV/TFU")

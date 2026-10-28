@@ -1,4 +1,15 @@
+"""JSON-compatible target descriptions and explicit application session data.
+
+The dictionary keys are the on-disk format. Keep them stable even when Python
+names change. Areal density is in TFU (10^15 atoms/cm²), composition in at. %,
+and stopping cross sections in keV/TFU.
+"""
+
 import copy
+import logging
+from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 class ReactionConfig(dict):
@@ -7,6 +18,7 @@ class ReactionConfig(dict):
     Z1/A1 are the beam ion, Z2/A2 the profiled element; E_R (keV), Gamma (keV)
     and Sigma (mbarn) describe the resonance.
     """
+
     INT_KEYS = ("Z1", "A1", "Z2", "A2")
     FLOAT_KEYS = ("E_R", "Gamma", "Sigma")
     DEFAULTS = {"Z1": 1, "A1": 1, "Z2": 7, "A2": 15, "E_R": 6385.0, "Gamma": 1.8, "Sigma": 1.65}
@@ -50,7 +62,9 @@ def reactions_from_sim(
 
 
 class Element(dict):
-    def __init__(self, data=None, Z: int = 14, percent_at: float = 100.0)->None: # Default: Si, 100% at.
+    """An element's atomic number and atomic percentage; defaults to pure Si."""
+
+    def __init__(self, data=None, Z: int = 14, percent_at: float = 100.0) -> None:  # Default: Si, 100% at.
         super().__init__()
         if data is not None:
             self.update(data)
@@ -58,18 +72,21 @@ class Element(dict):
             self["Z"] = Z
             self["percent_at"] = percent_at
 
+
 class Layer(dict):
-    def __init__(self, data=None, AD: float = 1000.0)->None:
+    """A uniform layer, including its calculated stopping cross section."""
+
+    def __init__(self, data=None, AD: float = 1000.0) -> None:
         super().__init__()
         if data is not None:
             self.update(data)
             self["elements"] = [Element(data=el) for el in data["elements"]]
         else:
             self["areal_density"] = AD
-            self["stopping"] = 0.01 # Dummy value
-            self["elements"] = [Element()] 
+            self["stopping"] = 0.01  # Dummy value
+            self["elements"] = [Element()]
 
-    def normalize(self)->bool:
+    def normalize(self) -> bool:
         total = sum(el["percent_at"] for el in self["elements"])
         if total != 100.0:
             for el in self["elements"]:
@@ -77,20 +94,20 @@ class Layer(dict):
             return True
         return False
 
-    def add_element(self)->None:
+    def add_element(self) -> None:
         self["elements"].append(Element())
-    
-    def remove_element(self, index:int)->None:
+
+    def remove_element(self, index: int) -> None:
         if len(self["elements"]) > 1:
             del self["elements"][index]
 
-    def lock_and_normalize(self, index_to_keep:int)->None:
+    def lock_and_normalize(self, index_to_keep: int) -> None:
         elements = self["elements"]
         percentages = [el["percent_at"] for el in elements]
         total = sum(percentages)
 
         if abs(total - 100.0) < 1e-9:
-            return   # Already sums to 100
+            return  # Already sums to 100
 
         fixed_value = percentages[index_to_keep]
         remaining = 100.0 - fixed_value
@@ -112,32 +129,63 @@ class Layer(dict):
                 return element.get("percent_at", 0)
         return None
 
+
 class Target(dict):
-    def __init__(self)->None:
-        self["layers"] = [Layer()] 
+    """Ordered layers, from the incident surface to the back of the target."""
+
+    def __init__(self) -> None:
+        self["layers"] = [Layer()]
 
     def normalize_all_layers(self) -> None:
         for i, layer in enumerate(self["layers"]):
             if layer.normalize():
-                print(f"Normalised target layer {i + 1}")
+                logger.debug(f"Normalised target layer {i + 1}")
 
-    def add_layer(self)->None:
-        self["layers"].append(Layer())  
-    
-    def remove_layer(self, index:int)->None:
+    def add_layer(self) -> None:
+        self["layers"].append(Layer())
+
+    def remove_layer(self, index: int) -> None:
         if len(self["layers"]) > 1:
             del self["layers"][index]
-    
-    def duplicate_layer(self, index:int)->None:
+
+    def duplicate_layer(self, index: int) -> None:
         original_layer = self["layers"][index]
         duplicated_layer = copy.deepcopy(original_layer)
         self["layers"].insert(index + 1, duplicated_layer)
 
-    def move_layer_up(self, index:int)->None:
+    def move_layer_up(self, index: int) -> None:
         if index > 0:
             self["layers"][index - 1], self["layers"][index] = self["layers"][index], self["layers"][index - 1]
-    
-    def move_layer_down(self, index:int)->None:
+
+    def move_layer_down(self, index: int) -> None:
         if index < len(self["layers"]) - 1:
             self["layers"][index + 1], self["layers"][index] = self["layers"][index], self["layers"][index + 1]
 
+
+EnergyBounds = tuple[float | None, float | None]
+
+
+@dataclass
+class Session:
+    """Editable scientific state, independent of widgets and file locations.
+
+    Energy arrays contain displayed energies (keV), including the user offset.
+    Empty curve lists mean no data. A legacy file can contain experimental
+    energies alone, which remain usable as a calculation grid.
+    """
+
+    target: Target = field(default_factory=Target)
+    standard: Target = field(default_factory=Target)
+    standard_reaction: ReactionConfig = field(default_factory=ReactionConfig)
+    experiment_reaction: ReactionConfig = field(default_factory=ReactionConfig)
+    experimental_energy: list[float] = field(default_factory=list)
+    experimental_yield: list[float] = field(default_factory=list)
+    experimental_error: list[float] = field(default_factory=list)
+    simulated_energy: list[float] = field(default_factory=list)
+    simulated_yield: list[float] = field(default_factory=list)
+    chi_squared: list[float] = field(default_factory=list)
+    chi_bounds: list[EnergyBounds | None] = field(default_factory=list)
+    chi_start: int = 0
+    energy_min: float | None = None
+    energy_max: float | None = None
+    energy_step: float = 2.5

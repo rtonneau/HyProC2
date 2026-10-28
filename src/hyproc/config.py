@@ -3,9 +3,11 @@
 The user's settings live in a per-user config directory and are created from
 the packaged ``default_settings.json`` on first use.
 """
+
 import json
 import os
 import sys
+import tempfile
 from importlib import resources
 from pathlib import Path
 
@@ -47,8 +49,19 @@ def settings_path() -> str:
 
 
 def _write_settings(path: str, settings: dict) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(settings, f, indent=4)
+    # Do not truncate a user's settings if encoding or writing fails midway.
+    text = json.dumps(settings, indent=4)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=Path(path).parent, prefix=".settings-", suffix=".tmp", delete=False
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(text)
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def _migrate_reactions(settings: dict) -> bool:
@@ -60,14 +73,19 @@ def _migrate_reactions(settings: dict) -> bool:
     return True
 
 
-def load_settings() -> dict:
+def load_settings(path: str | None = None) -> dict:
     """Loads the user's settings, migrating an old-shape file (rewritten once)."""
-    path = settings_path()
+    path = path or settings_path()
     with open(path, "r", encoding="utf-8") as f:
         settings = json.load(f)
     if _migrate_reactions(settings):
         _write_settings(path, settings)
     return settings
+
+
+def save_settings(settings: dict, path: str | None = None) -> None:
+    """Persist settings without dropping keys owned by other application features."""
+    _write_settings(path or settings_path(), settings)
 
 
 def default_reactions() -> tuple[ReactionConfig, ReactionConfig]:

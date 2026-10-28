@@ -1,5 +1,5 @@
-import tkinter as tk
 import math
+import tkinter as tk
 from tkinter import messagebox, ttk
 
 
@@ -83,7 +83,9 @@ class EnergyRangeDialog(tk.Toplevel):
             self.result = (e_min, e_max, step_size)
             self.destroy()
         except ValueError:
-            messagebox.showerror("Invalid Input", "Please enter valid numeric values for both energies and the step size.")
+            messagebox.showerror(
+                "Invalid Input", "Please enter valid numeric values for both energies and the step size."
+            )
 
     def use_sim_curve(self):
         if not self.sim_energy:

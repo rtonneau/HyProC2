@@ -29,7 +29,9 @@ def test_scs_stopping_sio2():
 
     assert math.isfinite(electronic) and electronic > 0
     assert 0 < nuclear < electronic
-    assert stopping.calc_stopping_cross_section(layer, 5000.0, REACTION, "SCS-25-Solid") == pytest.approx(electronic + nuclear)
+    assert stopping.calc_stopping_cross_section(layer, 5000.0, REACTION, "SCS-25-Solid") == pytest.approx(
+        electronic + nuclear
+    )
 
 
 def test_scs_stopping_zero_energy():
