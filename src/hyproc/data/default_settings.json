@@ -1,6 +1,6 @@
 {
     "SRIM_path": "C:/SRIM",
-    "save_path": "C:/Users/loudupon/OneDrive - Universit\u00e9 de Namur",
+    "save_path": "",
     "import_curve": {
         "columns": {
             "energy": "Energie (keV)",

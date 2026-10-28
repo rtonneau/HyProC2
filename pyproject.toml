@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hyproc"
+version = "0.1.0"
+description = "Depth profiling by resonant nuclear reaction analysis: simulation of excitation curves for layered targets."
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "Louis Dupont" }]
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "pandas",
+    "matplotlib",
+    "openpyxl",
+    "periodictable",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "pre-commit"]
+
+[project.urls]
+Repository = "https://github.com/LouisDupont-2/HyProC"
+
+[project.scripts]
+hyproc = "hyproc.app:main"
+hyproc-broadplotter = "hyproc.broadplotter:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+hyproc = ["data/*.json", "data/*.pdf"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

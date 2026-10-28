@@ -1,5 +1,4 @@
 import tkinter as tk
-from tkinter import font
 from tkinter import filedialog,messagebox
 from tkinter import ttk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg,NavigationToolbar2Tk
@@ -130,7 +129,7 @@ class GUI_app:
         """
         if not self.folder_path == "":
             val = self.slider.get()
-            if not self.filename==None:
+            if self.filename is not None:
                 self.load_and_plot(os.path.join(self.folder_path,f"datapoint{val}",self.filename))
     
     def combobox_changed(self, event):
@@ -209,8 +208,12 @@ class GUI_app:
             raise ValueError(f"Could not find energy pattern in {filename}")
         return float(match.group(1))
 
+def main() -> None:
+    root = tk.Tk()
+    GUI_app(root)
+    root.mainloop()
+
+
 # --- Run the GUI ---
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = GUI_app(root)
-    root.mainloop()
+    main()

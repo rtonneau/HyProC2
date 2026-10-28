@@ -1,19 +1,15 @@
 import numpy as np
 from scipy.signal import convolve
 import json
-from typing import Sequence, Literal
+from typing import Sequence
 from numpy.typing import NDArray
-import os
 import periodictable
-from xlwings import Range
 
-from class_models import Element, Layer, Target
+from .config import load_settings
+from .models import Target
 
 # Load settings
-script_dir = os.path.dirname(os.path.abspath(__file__))
-settings_path = os.path.join(script_dir, 'settings.json')
-with open(settings_path, 'r', encoding="utf-8") as f:
-    settings = json.load(f)
+settings = load_settings()
 
 Z1 = int(settings["reaction"]["Z1"])
 A1 = int(settings["reaction"]["A1"])
@@ -359,7 +355,7 @@ def broadening(E_in: float, target: Target, delta_B: float, Doppler: bool=True, 
     x_conv_TFU = np.zeros(len(x_conv))
     y_conv_TFU = np.zeros(len(x_conv))
 
-    for l,eVal in enumerate(x_conv):
+    for j,eVal in enumerate(x_conv):
         deltaE = E_R - eVal  # Energy difference relative to E_R
         Eloss_value = deltaE_in - deltaE  # Energy loss for the current energy value
         new_index = find_layer_index(E_in - deltaE, E_loss)
@@ -371,7 +367,7 @@ def broadening(E_in: float, target: Target, delta_B: float, Doppler: bool=True, 
         if new_index == -2:
             #value = center + (Eloss_value - deltaE_in)/target["layers"][0]["stopping"]
             x_value = Eloss_value/target["layers"][0]["stopping"]
-            y_value = y_conv[l] 
+            y_value = y_conv[j] 
             # y_conv[np.where(x_conv == eVal)] = 0
             outOfTarget += 1
         
@@ -384,7 +380,7 @@ def broadening(E_in: float, target: Target, delta_B: float, Doppler: bool=True, 
 
         # No escape
         if new_index > -1:
-            y_value = y_conv[l]
+            y_value = y_conv[j]
             layers_contribution[new_index] += 1
         
             if new_index != index and index > -1:
@@ -412,8 +408,8 @@ def broadening(E_in: float, target: Target, delta_B: float, Doppler: bool=True, 
             else:
                 x_value = center + (Eloss_value - deltaE_in)/target["layers"][new_index]["stopping"]  # Here, using index or new_index is equivalent            
         
-        x_conv_TFU[l] = x_value
-        y_conv_TFU[l] = y_value
+        x_conv_TFU[j] = x_value
+        y_conv_TFU[j] = y_value
 
     # Normalising to get layer contribution in %
     total = sum(layers_contribution) + outOfTarget
