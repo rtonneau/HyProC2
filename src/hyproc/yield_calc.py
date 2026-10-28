@@ -2,17 +2,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 import json
-from typing import Sequence, Literal
 from numpy.typing import NDArray
-import os
 
-from class_models import Element, Layer, Target
+from .config import load_settings
+from .models import Target
 
 # Load settings
-script_dir = os.path.dirname(os.path.abspath(__file__))
-settings_path = os.path.join(script_dir, 'settings.json')
-with open(settings_path, 'r', encoding="utf-8") as f:
-    settings = json.load(f)
+settings = load_settings()
 
 Z2 = int(settings["reaction"]["Z2"])
 

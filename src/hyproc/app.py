@@ -12,16 +12,17 @@ import sys
 from datetime import datetime
 import threading
 import traceback
-from typing import Sequence, Literal
+from typing import Literal
 
-from class_models import Element, Layer, Target
-import UI_geometry
-import mod2
-import mod3 
-import mod4        
-from energy_range_dialog import EnergyRangeDialog
-from settings_dialog import SettingsDialog
-from import_dialogs import SheetSelectionDialog, TableSelectionDialog
+from . import app_layout
+from . import broadening as mod3
+from . import stopping as mod2
+from . import yield_calc as mod4
+from .config import data_path, settings_path
+from .dialogs.energy_range import EnergyRangeDialog
+from .dialogs.import_selection import SheetSelectionDialog, TableSelectionDialog
+from .dialogs.settings import SettingsDialog
+from .models import Layer, Target
 
 def count_datapoints(df_raw: pd.DataFrame, header_row: int) -> int:
     # Count consecutive non-empty rows after the header
@@ -38,8 +39,7 @@ class GUI_App(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.script_dir = os.path.dirname(os.path.abspath(__file__)) 
-        self.settings_path = os.path.join(self.script_dir, 'settings.json')
+        self.settings_path = settings_path()
         self.timestamp = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
 
         self.title("HyProC")
@@ -69,7 +69,7 @@ class GUI_App(tk.Tk):
         self.chi_val=[]
         self.chi_energy_bounds_history: list[tuple[float | None, float | None] | None] = []
 
-        UI_geometry.create_widgets(self)
+        app_layout.create_widgets(self)
         self.refresh_layer_list()
         self.refresh_element_list() 
         self.refresh_Std_list()
@@ -1035,7 +1035,7 @@ class GUI_App(tk.Tk):
         dialog.show()
 
     def open_manual(self):
-        manual_path = os.path.join(self.script_dir, "HyProC_Manual.pdf")
+        manual_path = str(data_path("HyProC_Manual.pdf"))
         if sys.platform == "win32":
             os.startfile(manual_path)
         elif sys.platform == "darwin":
@@ -1160,12 +1160,12 @@ class GUI_App(tk.Tk):
         # Retrieving info from GUI
         try:
             beamWidth = float(self.beamSD_entry.get())
-        except:
+        except ValueError:
             messagebox.showerror("Calculation failed", "No beam width value was entered.")
             return 
         try:
             std_yield = float(self.std_Yield_entry.get())
-        except:
+        except ValueError:
             messagebox.showerror("Calculation failed", "No standard yield value was entered.")
             return
         DopplerYesNo = self.Doppler_bool.get()
@@ -1174,7 +1174,7 @@ class GUI_App(tk.Tk):
         straggling_model = self.straggling_model_combobox.get()
         try:
             offset = float(self.offset_entry.get())
-        except:
+        except ValueError:
             offset = 0.0
         chi_energy_bounds = self.get_chi_energy_bounds()
         if chi_energy_bounds is None:
@@ -1453,7 +1453,11 @@ class GUI_App(tk.Tk):
             self.save_json()
         self.quit()
 
-# Run app
-if __name__ == "__main__":
+def main() -> None:
     app = GUI_App()
     app.mainloop()
+
+
+# Run app
+if __name__ == "__main__":
+    main()

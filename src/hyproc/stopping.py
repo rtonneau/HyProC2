@@ -7,13 +7,11 @@ import math
 from functools import lru_cache
 from typing import Literal
 
-from class_models import Element, Layer, Target
+from .config import data_path, load_settings
+from .models import Layer, Target
 
 # Load settings
-script_dir = os.path.dirname(os.path.abspath(__file__))
-settings_path = os.path.join(script_dir, 'settings.json')
-with open(settings_path, 'r', encoding="utf-8") as f:
-    settings = json.load(f)
+settings = load_settings()
 
 Z1 = int(settings["reaction"]["Z1"])
 A1 = int(settings["reaction"]["A1"])
@@ -41,14 +39,8 @@ def write_input(layer: Layer, energy: float)->None:
     -------
         None
     """
-    # Finding out where the script is located
-    script_dir = os.path.dirname(os.path.abspath(__file__)) 
-    settings_path = os.path.join(script_dir, 'settings.json')
-
     # Loading the SRIM path from the settings json file
-    with open(settings_path,'r', encoding="utf-8") as f:
-        filedata = json.load(f)
-        path=filedata["SRIM_path"]
+    path = load_settings()["SRIM_path"]
     SRIM_path = os.path.join(path,"SR Module")    
     os.chdir(SRIM_path)
 
@@ -139,7 +131,7 @@ def read_SRIM_stopping_cross_section()-> float:
 
 @lru_cache(maxsize=1)
 def _load_dk_parameters() -> list[list[dict | None]]:
-    parameter_path = os.path.join(script_dir, "SCS-2025-solid.json")
+    parameter_path = data_path("SCS-2025-solid.json")
     with open(parameter_path, "r", encoding="utf-8") as file:
         data = json.load(file)
     return data["parameters"]
