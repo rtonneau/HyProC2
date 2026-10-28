@@ -68,7 +68,10 @@ class ReactionsDialog(tk.Toplevel):
         self.deiconify()
 
     def _build_ui(self):
-        reactions = {"standard": self.parent.std_reaction, "experiment": self.parent.exp_reaction}
+        reactions = {
+            "standard": self.parent.session.standard_reaction,
+            "experiment": self.parent.session.experiment_reaction,
+        }
         for column, (side, title) in enumerate(SIDES, start=1):
             ttk.Label(self, text=title, font=("TkDefaultFont", 10, "bold")).grid(row=0, column=column, padx=10, pady=5)
             for row, (key, _, _) in enumerate(FIELDS, start=1):
@@ -81,7 +84,9 @@ class ReactionsDialog(tk.Toplevel):
 
         buttons = ttk.Frame(self)
         buttons.grid(row=len(FIELDS) + 1, column=0, columnspan=3, pady=10)
-        ttk.Button(buttons, text="Copy experiment → standard", command=self.copy_experiment_to_standard).pack(side="left", padx=5)
+        ttk.Button(buttons, text="Copy experiment → standard", command=self.copy_experiment_to_standard).pack(
+            side="left", padx=5
+        )
         ttk.Button(buttons, text="Save as default", command=self.save_as_default).pack(side="left", padx=5)
         ttk.Button(buttons, text="OK", command=self.ok).pack(side="left", padx=5)
         ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="left", padx=5)
@@ -125,7 +130,7 @@ class ReactionsDialog(tk.Toplevel):
         configs = self._validate_both()
         if configs is None:
             return
-        self.parent.std_reaction, self.parent.exp_reaction = configs
+        self.parent.session.standard_reaction, self.parent.session.experiment_reaction = configs
         self.destroy()
 
     def show(self):

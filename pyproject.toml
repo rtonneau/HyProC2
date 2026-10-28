@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -18,23 +18,27 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
-    "numpy",
+    "numpy>=2.0",
     "scipy",
     "pandas",
-    "matplotlib",
+    "matplotlib>=3.8",
     "openpyxl",
+    "xlrd>=2.0.1",
     "periodictable",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "pre-commit"]
+dev = ["pytest", "ruff", "pre-commit", "build", "twine"]
 
 [project.urls]
-Repository = "https://github.com/LouisDupont-2/HyProC"
+Repository = "https://github.com/rtonneau/HyProC2"
+Issues = "https://github.com/rtonneau/HyProC2/issues"
+Upstream = "https://github.com/LouisDupont-2/HyProC"
 
 [project.scripts]
 hyproc = "hyproc.app:main"
 hyproc-broadplotter = "hyproc.broadplotter:main"
+hyproc-simulate = "hyproc.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -51,4 +55,4 @@ target-version = "py310"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]
+select = ["E4", "E7", "E9", "F", "I"]
