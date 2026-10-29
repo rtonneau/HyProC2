@@ -1,4 +1,17 @@
-# HyProC
+<p align="center">
+  <img src="docs/assets/hyproc-icon.svg" width="120" height="120" alt="HyProC: a resonance peak above layered targets">
+</p>
+
+<h1 align="center">HyProC</h1>
+
+<p align="center">Depth profiling by resonant nuclear reaction analysis</p>
+
+<p align="center">
+  <a href="https://github.com/rtonneau/HyProC2/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/rtonneau/HyProC2/ci.yml?branch=main&amp;style=flat-square&amp;label=CI" alt="CI status"></a>
+  <a href="#installation"><img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&amp;logo=python&amp;logoColor=white" alt="Python 3.10 or newer"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/version-0.2.0-14B8A6?style=flat-square" alt="Version 0.2.0"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-64748B?style=flat-square" alt="License: GPL-3.0-or-later"></a>
+</p>
 
 HyProC simulates excitation curves for **depth profiling by resonant nuclear reaction analysis (NRA)**.
 Describe a layered target and a uniform reference standard, calculate gamma yield versus beam energy,

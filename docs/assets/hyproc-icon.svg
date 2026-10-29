@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">HyProC</title>
+  <desc id="desc">A gold resonance peak above three teal target layers on a rounded navy tile.</desc>
+  <defs>
+    <linearGradient id="tile" x1="16" y1="8" x2="144" y2="152" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#172B46"/>
+      <stop offset="1" stop-color="#0B1526"/>
+    </linearGradient>
+    <linearGradient id="layers" x1="36" y1="102" x2="124" y2="136" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5EEAD4"/>
+      <stop offset="1" stop-color="#22A3B5"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="152" height="152" rx="34" fill="url(#tile)"/>
+  <rect x="4.5" y="4.5" width="151" height="151" rx="33.5" stroke="#A5D8EF" stroke-opacity=".16"/>
+  <path d="M30 88H130" stroke="#94A3B8" stroke-opacity=".25" stroke-width="2" stroke-linecap="round"/>
+  <path d="M80 32V132" stroke="#5EEAD4" stroke-opacity=".2" stroke-width="2" stroke-dasharray="3 6"/>
+  <path d="M30 82C48 82 54 81 61 73C70 63 72 38 80 38C88 38 90 63 99 73C106 81 112 82 130 82" stroke="#FBBF24" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="80" cy="38" r="4" fill="#FEF3C7"/>
+  <g stroke="url(#layers)" stroke-width="3" stroke-linejoin="round">
+    <path d="M36 105L80 93L124 105L80 117Z" fill="#2DD4BF" fill-opacity=".2"/>
+    <path d="M36 115L80 127L124 115"/>
+    <path d="M36 125L80 137L124 125" opacity=".55"/>
+  </g>
+</svg>
